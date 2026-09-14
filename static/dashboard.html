@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>收入統計 - 羽球教練紀錄工具</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/">行事曆</a>
+    <a href="/students.html">學生管理</a>
+    <a href="/packages.html">課程包</a>
+    <a href="/venues.html">場地管理</a>
+    <a href="/price_rules.html">價目表</a>
+    <a href="/dashboard.html">收入統計</a>
+    <a href="/unpaid.html">未收款清單</a>
+  </nav>
+  <main>
+    <h1>收入統計</h1>
+    <div class="stat-cards">
+      <div class="stat-card">
+        <div class="stat-label">本週收入</div>
+        <div class="stat-value" id="stat-week">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月收入</div>
+        <div class="stat-value" id="stat-month">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本年收入</div>
+        <div class="stat-value" id="stat-year">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">總收入</div>
+        <div class="stat-value" id="stat-total">—</div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

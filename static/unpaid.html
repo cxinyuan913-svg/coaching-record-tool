@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>未收款清單 - 羽球教練紀錄工具</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/">行事曆</a>
+    <a href="/students.html">學生管理</a>
+    <a href="/packages.html">課程包</a>
+    <a href="/venues.html">場地管理</a>
+    <a href="/price_rules.html">價目表</a>
+    <a href="/dashboard.html">收入統計</a>
+    <a href="/unpaid.html">未收款清單</a>
+  </nav>
+  <main>
+    <h1>未收款清單</h1>
+
+    <div class="section-block">
+      <h2>課程未收款（單堂制）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>學生</th>
+            <th>場地</th>
+            <th>金額</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="unpaid-lessons"></tbody>
+      </table>
+    </div>
+
+    <div class="section-block">
+      <h2>包未收款</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>學生</th>
+            <th>包名稱</th>
+            <th>總金額</th>
+            <th>剩餘/總堂數</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="unpaid-packages"></tbody>
+      </table>
+    </div>
+
+    <div class="section-block">
+      <h2>未結清差額</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>類型</th>
+            <th>金額</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="unsettled-adjustments"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/unpaid.js"></script>
+</body>
+</html>
