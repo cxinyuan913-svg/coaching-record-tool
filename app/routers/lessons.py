@@ -198,7 +198,9 @@ def delete_lesson(lesson_id: int, db: Session = Depends(get_db)):
     package_id = db_lesson.package_id
     db.delete(db_lesson)
     if package_id is not None:
+        db.flush()  # 確保 recompute 查詢時已經看不到被刪除的這堂
         package = db.get(models.Package, package_id)
         if package is not None:
             recompute_remaining_sessions(db, package)
+            recompute_package_pricing(db, package)
     db.commit()
