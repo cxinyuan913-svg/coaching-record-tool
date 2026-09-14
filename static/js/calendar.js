@@ -3,6 +3,7 @@
 let students = [];
 let venues = [];
 let editingLessonId = null;
+let editingLesson = null;
 let calendar = null;
 
 function populateSelect(id, items, labelFn) {
@@ -38,7 +39,14 @@ function statusClass(lesson) {
 }
 
 function lessonToEvent(lesson) {
-  const billing = lesson.package_id ? "包制" : "單堂";
+  let billing;
+  if (!lesson.package_id) {
+    billing = "單堂";
+  } else if (lesson.sequence_no) {
+    billing = `第${lesson.sequence_no}/${lesson.package_total_sessions}堂`;
+  } else {
+    billing = "順延堂";
+  }
   return {
     id: String(lesson.id),
     title: `${lesson.start_time.slice(0, 5)} ${lesson.student_name} ${lesson.venue_name}（${billing}）`,
@@ -94,6 +102,7 @@ function openCreateModal(dateStr) {
     return;
   }
   editingLessonId = null;
+  editingLesson = null;
   document.getElementById("modal-title").textContent = "新增課程";
   document.getElementById("f-student").selectedIndex = 0;
   document.getElementById("f-venue").selectedIndex = 0;
@@ -102,6 +111,9 @@ function openCreateModal(dateStr) {
   document.getElementById("f-duration").value = 60;
   document.getElementById("f-headcount").value = 1;
   document.getElementById("f-payment").value = "unpaid";
+  document.getElementById("f-amount").disabled = false;
+  document.getElementById("f-payment").disabled = false;
+  document.getElementById("package-note").style.display = "none";
   document.getElementById("row-status").style.display = "none";
   document.getElementById("btn-delete").style.display = "none";
   refreshSuggestedPrice();
@@ -111,6 +123,8 @@ function openCreateModal(dateStr) {
 async function openEditModal(lessonId) {
   const lesson = await api.get(`/api/lessons/${lessonId}`);
   editingLessonId = lesson.id;
+  editingLesson = lesson;
+  const isPackage = !!lesson.package_id;
   document.getElementById("modal-title").textContent = "編輯課程";
   document.getElementById("f-student").value = lesson.student_id;
   document.getElementById("f-venue").value = lesson.venue_id;
@@ -121,6 +135,9 @@ async function openEditModal(lessonId) {
   document.getElementById("f-amount").value = lesson.revenue_amount;
   document.getElementById("f-payment").value = lesson.payment_status;
   document.getElementById("f-status").value = lesson.status;
+  document.getElementById("f-amount").disabled = isPackage;
+  document.getElementById("f-payment").disabled = isPackage;
+  document.getElementById("package-note").style.display = isPackage ? "" : "none";
   document.getElementById("row-status").style.display = "";
   document.getElementById("btn-delete").style.display = "";
   document.getElementById("lesson-modal").classList.add("open");
@@ -130,8 +147,37 @@ function closeModal() {
   document.getElementById("lesson-modal").classList.remove("open");
 }
 
+async function handleLeaveFlow() {
+  let body = {};
+  for (;;) {
+    try {
+      await api.post(`/api/lessons/${editingLessonId}/leave`, body);
+      return true;
+    } catch (err) {
+      const retryDate = prompt(
+        `${err.message}\n請輸入順延日期（YYYY-MM-DD），取消則放棄請假`,
+        ""
+      );
+      if (!retryDate) return false;
+      body = { makeup_date: retryDate };
+    }
+  }
+}
+
 async function handleSave(e) {
   e.preventDefault();
+  const newStatus = document.getElementById("f-status").value;
+  const isPackage = editingLesson && !!editingLesson.package_id;
+
+  if (editingLessonId && isPackage && newStatus === "leave" && editingLesson.status !== "leave") {
+    const ok = await handleLeaveFlow();
+    if (ok) {
+      closeModal();
+      calendar.refetchEvents();
+    }
+    return;
+  }
+
   const payload = {
     student_id: parseInt(document.getElementById("f-student").value, 10),
     venue_id: parseInt(document.getElementById("f-venue").value, 10),
@@ -144,7 +190,7 @@ async function handleSave(e) {
   };
   try {
     if (editingLessonId) {
-      payload.status = document.getElementById("f-status").value;
+      payload.status = newStatus;
       await api.put(`/api/lessons/${editingLessonId}`, payload);
     } else {
       await api.post("/api/lessons", payload);
