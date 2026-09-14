@@ -39,7 +39,7 @@ function renderPackages(packages) {
   const tbody = document.getElementById("unpaid-packages");
   tbody.innerHTML = "";
   if (packages.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5">目前沒有未收款的包</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">目前沒有未收款的套組</td></tr>';
     return;
   }
   packages.forEach((p) => {

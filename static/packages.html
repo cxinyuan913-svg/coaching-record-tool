@@ -2,14 +2,14 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>課程包 - 羽球教練紀錄工具</title>
+  <title>課程套組 - 羽球教練紀錄工具</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
   <nav class="topnav">
     <a href="/">行事曆</a>
     <a href="/students.html">學生管理</a>
-    <a href="/packages.html">課程包</a>
+    <a href="/packages.html">課程套組</a>
     <a href="/venues.html">場地管理</a>
     <a href="/price_rules.html">價目表</a>
     <a href="/dashboard.html">收入統計</a>
@@ -18,8 +18,8 @@
   </nav>
   <main>
     <div class="toolbar">
-      <h1>課程包</h1>
-      <button id="btn-add">新增包</button>
+      <h1>課程套組</h1>
+      <button id="btn-add">新增套組</button>
     </div>
     <table>
       <thead>
@@ -40,14 +40,14 @@
 
   <div class="modal-backdrop" id="package-modal">
     <div class="modal">
-      <h2>新增包（批次排課）</h2>
+      <h2 id="modal-title">新增套組（批次排課）</h2>
       <form id="package-form">
         <div class="form-row">
           <label for="f-student">學生</label>
           <select id="f-student" required></select>
         </div>
         <div class="form-row">
-          <label for="f-name">包名稱</label>
+          <label for="f-name">套組名稱</label>
           <input id="f-name" type="text" required />
         </div>
         <div class="form-row">
@@ -75,22 +75,25 @@
         </div>
         <div class="form-row">
           <label for="f-recur-time">上課時段</label>
-          <input id="f-recur-time" type="time" required />
+          <input id="f-recur-time" type="time" step="1800" required />
         </div>
         <div class="form-row">
           <label for="f-venue">預設場地</label>
           <select id="f-venue" required></select>
         </div>
-        <div class="form-row">
+        <div class="form-row" id="row-payment">
           <label for="f-payment">收款狀態</label>
           <select id="f-payment">
             <option value="unpaid">未收款</option>
             <option value="paid">已收款</option>
           </select>
         </div>
+        <p id="edit-note" style="display: none; font-size: 13px; color: #888">
+          編輯不會重新產生堂數；已排好的課程請到行事曆個別改期。收款狀態請用列表上的按鈕切換。
+        </p>
         <div class="modal-actions">
           <button type="button" class="secondary" id="btn-cancel">取消</button>
-          <button type="submit">儲存並批次排課</button>
+          <button type="submit" id="btn-save">儲存並批次排課</button>
         </div>
       </form>
     </div>
@@ -98,7 +101,7 @@
 
   <div class="modal-backdrop" id="settlement-modal">
     <div class="modal">
-      <h2>包結算單</h2>
+      <h2>套組結算單</h2>
       <table style="margin-bottom: 10px">
         <thead>
           <tr>

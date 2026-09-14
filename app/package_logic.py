@@ -1,4 +1,4 @@
-"""包制批次排課、剩餘堂數重算、請假順延邏輯（見 SPEC.md 包制批次排課／請假順延）。"""
+"""套組批次排課、剩餘堂數重算、請假順延邏輯（見 SPEC.md 套組批次排課／請假順延）。"""
 from datetime import timedelta
 
 from fastapi import HTTPException
@@ -10,7 +10,7 @@ from app.pricing import resolve_price
 
 
 def generate_package_lessons(db: Session, package: models.Package) -> None:
-    """依包的起始日、週幾、時段，一次產生 total_sessions 筆 lessons。"""
+    """依套組的起始日、週幾、時段，一次產生 total_sessions 筆 lessons。"""
     for i in range(package.total_sessions):
         lesson = models.Lesson(
             student_id=package.student_id,
@@ -57,7 +57,7 @@ def mark_leave_and_reschedule(
     """標記請假並順延一堂（見 SPEC.md 請假順延）。回傳新產生的順延 lesson。"""
     package = db.get(models.Package, lesson.package_id)
     if package is None:
-        raise HTTPException(status_code=400, detail="此堂非包制課程，無需順延")
+        raise HTTPException(status_code=400, detail="此堂非套組課程，無需順延")
 
     lesson.deduct_session = False
     lesson.revenue_amount = 0
@@ -114,7 +114,7 @@ def mark_leave_and_reschedule(
 def sync_headcount_diff_adjustment(
     db: Session, lesson: models.Lesson, student: models.Student
 ) -> None:
-    """包制以單人價預收，人數改為 N 人時自動算出差額（見 SPEC.md 人數差額）。"""
+    """套組以單人價預收，人數改為 N 人時自動算出差額（見 SPEC.md 人數差額）。"""
     existing = (
         db.query(models.Adjustment)
         .filter(

@@ -149,6 +149,19 @@ class PackageCreate(PackageBase):
     pass
 
 
+class PackageUpdate(BaseModel):
+    """套組設定完後可編輯的欄位；不含 student_id/total_sessions/payment_status（付款狀態走專屬端點）。"""
+
+    name: str
+    session_duration: int
+    total_price: float
+    purchased_date: date
+    start_date: date
+    recur_weekday: int
+    recur_start_time: time
+    default_venue_id: int
+
+
 class PackagePaymentUpdate(BaseModel):
     payment_status: PaymentStatus
 

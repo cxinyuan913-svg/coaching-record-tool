@@ -11,7 +11,7 @@
   <nav class="topnav">
     <a href="/">行事曆</a>
     <a href="/students.html">學生管理</a>
-    <a href="/packages.html">課程包</a>
+    <a href="/packages.html">課程套組</a>
     <a href="/venues.html">場地管理</a>
     <a href="/price_rules.html">價目表</a>
     <a href="/dashboard.html">收入統計</a>
@@ -44,7 +44,7 @@
         </div>
         <div class="form-row">
           <label for="f-time">時間</label>
-          <input id="f-time" type="time" required />
+          <input id="f-time" type="time" step="1800" required />
         </div>
         <div class="form-row">
           <label for="f-duration">時長（分鐘）</label>
@@ -55,7 +55,7 @@
           <input id="f-headcount" type="number" min="1" value="1" required />
         </div>
         <p id="package-note" style="display: none; font-size: 13px; color: #888">
-          此堂屬於課程包，金額與收款狀態由該包統一控管；狀態改為「請假」會自動順延一堂。
+          此堂屬於課程套組，金額與收款狀態由該套組統一控管；狀態改為「請假」會自動順延一堂。
         </p>
         <div class="form-row">
           <label for="f-amount">金額（自動依價目表帶入，可覆寫）</label>

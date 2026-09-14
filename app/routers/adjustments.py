@@ -32,7 +32,7 @@ def create_adjustment(payload: schemas.AdjustmentCreate, db: Session = Depends(g
     lesson = db.get(models.Lesson, payload.lesson_id)
     if lesson is None:
         raise HTTPException(status_code=404, detail="課程不存在")
-    # package_id 一律由該堂課實際所屬的包決定，不採用前端傳入值，避免資料不一致
+    # package_id 一律由該堂課實際所屬的套組決定，不採用前端傳入值，避免資料不一致
     db_adjustment = models.Adjustment(
         lesson_id=payload.lesson_id,
         package_id=lesson.package_id,
