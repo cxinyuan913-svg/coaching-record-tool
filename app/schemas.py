@@ -48,3 +48,24 @@ class PriceRuleOut(PriceRuleBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+
+
+class StudentBase(BaseModel):
+    name: str
+    contact: str | None = None
+    note: str | None = None
+    tier: Tier = Tier.NEW
+
+
+class StudentCreate(StudentBase):
+    pass
+
+
+class StudentUpdate(StudentBase):
+    pass
+
+
+class StudentOut(StudentBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
