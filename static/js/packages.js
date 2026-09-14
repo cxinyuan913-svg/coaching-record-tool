@@ -51,6 +51,7 @@ async function loadPackages() {
         </button>
       </td>
       <td>
+        <button class="secondary" data-action="settlement" data-id="${p.id}">結算單</button>
         <button class="danger" data-action="delete" data-id="${p.id}">刪除</button>
       </td>
     `;
@@ -110,6 +111,45 @@ async function handleSave(e) {
   }
 }
 
+const ADJ_TYPE_LABEL = { headcount_diff: "人數差額", venue_fee: "場地費", other: "其他" };
+let settlementPackageId = null;
+
+async function openSettlementModal(packageId) {
+  settlementPackageId = packageId;
+  await refreshSettlement();
+  document.getElementById("settlement-modal").classList.add("open");
+}
+
+async function refreshSettlement() {
+  const data = await api.get(`/api/packages/${settlementPackageId}/settlement`);
+  const tbody = document.getElementById("settlement-list");
+  tbody.innerHTML = "";
+  if (data.adjustments.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3">目前沒有未結清差額</td></tr>';
+  } else {
+    data.adjustments.forEach((a) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${ADJ_TYPE_LABEL[a.type] || a.type}</td>
+        <td>${a.amount}</td>
+        <td>${escapeHtml(a.note || "")}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+  document.getElementById("settlement-total").textContent = data.total;
+}
+
+async function handleSettleAll() {
+  if (!settlementPackageId) return;
+  try {
+    await api.patch(`/api/packages/${settlementPackageId}/settlement/settle`, {});
+    await refreshSettlement();
+  } catch (err) {
+    alert("結清失敗：" + err.message);
+  }
+}
+
 async function handleListClick(e) {
   const btn = e.target.closest("button");
   if (!btn) return;
@@ -122,6 +162,8 @@ async function handleListClick(e) {
     } catch (err) {
       alert("更新收款狀態失敗：" + err.message);
     }
+  } else if (btn.dataset.action === "settlement") {
+    await openSettlementModal(id);
   } else if (btn.dataset.action === "delete") {
     if (confirm("確定要刪除這個包嗎？包底下所有課程也會一併刪除。")) {
       try {
@@ -141,4 +183,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("package-form").addEventListener("submit", handleSave);
   document.getElementById("package-list").addEventListener("click", handleListClick);
+  document.getElementById("btn-settlement-close").addEventListener("click", () => {
+    document.getElementById("settlement-modal").classList.remove("open");
+  });
+  document.getElementById("btn-settle-all").addEventListener("click", handleSettleAll);
 });

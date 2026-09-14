@@ -96,6 +96,27 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="settlement-modal">
+    <div class="modal">
+      <h2>包結算單</h2>
+      <table style="margin-bottom: 10px">
+        <thead>
+          <tr>
+            <th>類型</th>
+            <th>金額</th>
+            <th>備註</th>
+          </tr>
+        </thead>
+        <tbody id="settlement-list"></tbody>
+      </table>
+      <p><strong>未結清合計：<span id="settlement-total">0</span></strong></p>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="btn-settlement-close">關閉</button>
+        <button type="button" id="btn-settle-all">全部標記結清</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/js/common.js"></script>
   <script src="/static/js/packages.js"></script>
 </body>
