@@ -279,7 +279,7 @@ async function handleSave(e) {
     student_id: parseInt(document.getElementById("f-student").value, 10),
     venue_id: parseInt(document.getElementById("f-venue").value, 10),
     date: document.getElementById("f-date").value,
-    start_time: document.getElementById("f-time").value + ":00",
+    start_time: roundToHalfHour(document.getElementById("f-time").value) + ":00",
     duration: parseInt(document.getElementById("f-duration").value, 10),
     headcount: parseInt(document.getElementById("f-headcount").value, 10),
     payment_status: document.getElementById("f-payment").value,

@@ -1,4 +1,4 @@
-"""包制課程 CRUD API：批次排課、剩餘堂數、付款狀態。"""
+"""套組課程 CRUD API：批次排課、剩餘堂數、付款狀態。"""
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -90,7 +90,38 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
 def get_package(package_id: int, db: Session = Depends(get_db)):
     package = db.get(models.Package, package_id)
     if package is None:
-        raise HTTPException(status_code=404, detail="包不存在")
+        raise HTTPException(status_code=404, detail="套組不存在")
+    return _to_out(package)
+
+
+@router.put("/{package_id}", response_model=schemas.PackageOut)
+def update_package(package_id: int, payload: schemas.PackageUpdate, db: Session = Depends(get_db)):
+    """套組設定完後可編輯基本資料；金額調整會連動更新底下所有堂的攤提金額。"""
+    package = db.get(models.Package, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="套組不存在")
+    venue = db.get(models.Venue, payload.default_venue_id)
+    if venue is None:
+        raise HTTPException(status_code=404, detail="場地不存在")
+    if not 0 <= payload.recur_weekday <= 6:
+        raise HTTPException(status_code=400, detail="recur_weekday 必須介於 0-6")
+
+    package.name = payload.name
+    package.session_duration = payload.session_duration
+    package.total_price = payload.total_price
+    package.purchased_date = payload.purchased_date
+    package.start_date = payload.start_date
+    package.recur_weekday = payload.recur_weekday
+    package.recur_start_time = payload.recur_start_time
+    package.default_venue_id = payload.default_venue_id
+    package.price_per_session = round(payload.total_price / package.total_sessions, 2)
+
+    # 套組單堂攤提金額調整後，底下所有堂的 revenue_amount 一併同步
+    db.query(models.Lesson).filter(models.Lesson.package_id == package_id).update(
+        {"revenue_amount": package.price_per_session}
+    )
+    db.commit()
+    db.refresh(package)
     return _to_out(package)
 
 
@@ -100,7 +131,7 @@ def list_package_lessons(package_id: int, db: Session = Depends(get_db)):
 
     package = db.get(models.Package, package_id)
     if package is None:
-        raise HTTPException(status_code=404, detail="包不存在")
+        raise HTTPException(status_code=404, detail="套組不存在")
     lessons = (
         db.query(models.Lesson)
         .filter(models.Lesson.package_id == package_id)
@@ -116,12 +147,12 @@ def update_package_payment(
 ):
     package = db.get(models.Package, package_id)
     if package is None:
-        raise HTTPException(status_code=404, detail="包不存在")
+        raise HTTPException(status_code=404, detail="套組不存在")
     package.payment_status = payload.payment_status
     package.payment_date = (
         date_type.today() if payload.payment_status == PaymentStatus.PAID else None
     )
-    # 包的付款狀態變更時，底下所有 lessons 的付款狀態跟著同步
+    # 套組的付款狀態變更時，底下所有 lessons 的付款狀態跟著同步
     db.query(models.Lesson).filter(models.Lesson.package_id == package_id).update(
         {
             "payment_status": package.payment_status,
@@ -135,10 +166,10 @@ def update_package_payment(
 
 @router.get("/{package_id}/settlement", response_model=schemas.PackageSettlement)
 def get_package_settlement(package_id: int, db: Session = Depends(get_db)):
-    """彙整該包目前未結清的差額（人數差額／場地費等），供期末結算參考。"""
+    """彙整該套組目前未結清的差額（人數差額／場地費等），供期末結算參考。"""
     package = db.get(models.Package, package_id)
     if package is None:
-        raise HTTPException(status_code=404, detail="包不存在")
+        raise HTTPException(status_code=404, detail="套組不存在")
     adjustments = (
         db.query(models.Adjustment)
         .filter(models.Adjustment.package_id == package_id, models.Adjustment.settled.is_(False))
@@ -153,12 +184,12 @@ def get_package_settlement(package_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{package_id}/settlement/settle", response_model=schemas.PackageSettlement)
 def settle_package(package_id: int, db: Session = Depends(get_db)):
-    """將該包所有未結清差額整批標記為已結清。"""
+    """將該套組所有未結清差額整批標記為已結清。"""
     from datetime import datetime
 
     package = db.get(models.Package, package_id)
     if package is None:
-        raise HTTPException(status_code=404, detail="包不存在")
+        raise HTTPException(status_code=404, detail="套組不存在")
     adjustments = (
         db.query(models.Adjustment)
         .filter(models.Adjustment.package_id == package_id, models.Adjustment.settled.is_(False))
@@ -179,7 +210,7 @@ def settle_package(package_id: int, db: Session = Depends(get_db)):
 def delete_package(package_id: int, db: Session = Depends(get_db)):
     package = db.get(models.Package, package_id)
     if package is None:
-        raise HTTPException(status_code=404, detail="包不存在")
+        raise HTTPException(status_code=404, detail="套組不存在")
     lesson_ids = [
         lid
         for (lid,) in db.query(models.Lesson.id).filter(models.Lesson.package_id == package_id)

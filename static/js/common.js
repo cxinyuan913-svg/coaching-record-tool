@@ -28,6 +28,16 @@ const api = {
   delete: (url) => apiRequest("DELETE", url),
 };
 
+// 將 "HH:MM" 時間字串校正到最近的整點或半點（例如 18:12 -> 18:00、18:16 -> 18:30）
+function roundToHalfHour(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  let totalMinutes = h * 60 + Math.round(m / 30) * 30;
+  totalMinutes = ((totalMinutes % 1440) + 1440) % 1440; // 避免超過 23:30 進位跨日
+  const rh = Math.floor(totalMinutes / 60);
+  const rm = totalMinutes % 60;
+  return `${String(rh).padStart(2, "0")}:${String(rm).padStart(2, "0")}`;
+}
+
 function highlightActiveNav() {
   const path = window.location.pathname;
   document.querySelectorAll("nav.topnav a").forEach((a) => {

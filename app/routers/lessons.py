@@ -1,5 +1,5 @@
 """課程 CRUD API。單堂制（package_id 為 NULL）可自由編輯金額與收款狀態；
-包制課程（package_id 有值）的金額與收款狀態一律由所屬包控管，並提供請假順延端點。"""
+套組課程（package_id 有值）的金額與收款狀態一律由所屬套組控管，並提供請假順延端點。"""
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -60,7 +60,7 @@ def list_lessons(
 
 @router.post("", response_model=schemas.LessonOut, status_code=201)
 def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
-    """僅建立單堂制課程；包制課程一律透過「新增包」批次產生。"""
+    """僅建立單堂制課程；套組課程一律透過「新增套組」批次產生。"""
     student = db.get(models.Student, lesson.student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="學生不存在")
@@ -115,7 +115,7 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     if is_package_lesson and lesson.status == LessonStatus.LEAVE and db_lesson.status != LessonStatus.LEAVE:
         raise HTTPException(
             status_code=400,
-            detail="包制課程請假請使用 /api/lessons/{id}/leave 端點（會自動順延一堂）",
+            detail="套組課程請假請使用 /api/lessons/{id}/leave 端點（會自動順延一堂）",
         )
 
     db_lesson.student_id = lesson.student_id
@@ -127,7 +127,7 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     db_lesson.status = lesson.status
 
     if is_package_lesson:
-        # 包制課程的金額與收款狀態一律隨包，不可個別覆寫
+        # 套組課程的金額與收款狀態一律隨套組，不可個別覆寫
         package = db.get(models.Package, db_lesson.package_id)
         db_lesson.revenue_amount = package.price_per_session
         db_lesson.payment_status = package.payment_status
@@ -151,7 +151,7 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
 def leave_lesson(
     lesson_id: int, payload: schemas.LessonLeaveRequest, db: Session = Depends(get_db)
 ):
-    """包制課程請假順延：標記該堂請假並自動產生順延一堂（見 SPEC.md 請假順延）。"""
+    """套組課程請假順延：標記該堂請假並自動產生順延一堂（見 SPEC.md 請假順延）。"""
     db_lesson = db.get(models.Lesson, lesson_id)
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="課程不存在")
@@ -178,7 +178,7 @@ def update_payment_status(
         raise HTTPException(status_code=404, detail="課程不存在")
     if db_lesson.package_id is not None:
         raise HTTPException(
-            status_code=400, detail="包制課程的收款狀態請透過該包的付款端點切換"
+            status_code=400, detail="套組課程的收款狀態請透過該套組的付款端點切換"
         )
     db_lesson.payment_status = payload.payment_status
     db_lesson.payment_date = (

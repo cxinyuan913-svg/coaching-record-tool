@@ -1,4 +1,4 @@
-// 課程包管理頁邏輯
+// 課程套組管理頁邏輯
 
 const TIER_LABEL = { new: "新生", friend: "朋友", regular: "熟客" };
 const WEEKDAY_LABEL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
@@ -6,6 +6,7 @@ const STATUS_LABEL = { active: "進行中", completed: "已完成", expired: "�
 
 let students = [];
 let venues = [];
+let editingId = null;
 
 function populateSelect(id, items, labelFn) {
   const select = document.getElementById(id);
@@ -51,6 +52,7 @@ async function loadPackages() {
         </button>
       </td>
       <td>
+        <button class="secondary" data-action="edit" data-id="${p.id}">編輯</button>
         <button class="secondary" data-action="settlement" data-id="${p.id}">結算單</button>
         <button class="danger" data-action="delete" data-id="${p.id}">刪除</button>
       </td>
@@ -65,45 +67,62 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function openModal() {
-  document.getElementById("f-student").selectedIndex = 0;
-  document.getElementById("f-venue").selectedIndex = 0;
-  document.getElementById("f-name").value = "8堂1小時包";
-  document.getElementById("f-duration").value = "60";
-  document.getElementById("f-total-price").value = "";
-  document.getElementById("f-purchased-date").value = new Date().toISOString().slice(0, 10);
-  document.getElementById("f-start-date").value = "";
-  document.getElementById("f-weekday").value = "1";
-  document.getElementById("f-recur-time").value = "18:00";
+function openModal(pkg) {
+  editingId = pkg ? pkg.id : null;
+  const isEdit = !!pkg;
+  document.getElementById("modal-title").textContent = isEdit ? "編輯套組" : "新增套組（批次排課）";
+  document.getElementById("btn-save").textContent = isEdit ? "儲存" : "儲存並批次排課";
+  document.getElementById("f-student").disabled = isEdit;
+  document.getElementById("row-payment").style.display = isEdit ? "none" : "";
+  document.getElementById("edit-note").style.display = isEdit ? "" : "none";
+
+  document.getElementById("f-student").value = pkg ? pkg.student_id : students[0]?.id ?? "";
+  document.getElementById("f-venue").value = pkg ? pkg.default_venue_id : venues[0]?.id ?? "";
+  document.getElementById("f-name").value = pkg ? pkg.name : "8堂1小時套組";
+  document.getElementById("f-duration").value = pkg ? pkg.session_duration : "60";
+  document.getElementById("f-total-price").value = pkg ? pkg.total_price : "";
+  document.getElementById("f-purchased-date").value = pkg
+    ? pkg.purchased_date
+    : new Date().toISOString().slice(0, 10);
+  document.getElementById("f-start-date").value = pkg ? pkg.start_date : "";
+  document.getElementById("f-weekday").value = pkg ? pkg.recur_weekday : "1";
+  document.getElementById("f-recur-time").value = pkg ? pkg.recur_start_time.slice(0, 5) : "18:00";
   document.getElementById("f-payment").value = "unpaid";
   document.getElementById("package-modal").classList.add("open");
 }
 
 function closeModal() {
   document.getElementById("package-modal").classList.remove("open");
+  document.getElementById("f-student").disabled = false;
 }
 
 async function handleSave(e) {
   e.preventDefault();
   const payload = {
-    student_id: parseInt(document.getElementById("f-student").value, 10),
     name: document.getElementById("f-name").value.trim(),
     session_duration: parseInt(document.getElementById("f-duration").value, 10),
-    total_sessions: 8,
     total_price: parseFloat(document.getElementById("f-total-price").value),
     purchased_date: document.getElementById("f-purchased-date").value,
     start_date: document.getElementById("f-start-date").value,
     recur_weekday: parseInt(document.getElementById("f-weekday").value, 10),
-    recur_start_time: document.getElementById("f-recur-time").value + ":00",
+    recur_start_time: roundToHalfHour(document.getElementById("f-recur-time").value) + ":00",
     default_venue_id: parseInt(document.getElementById("f-venue").value, 10),
-    payment_status: document.getElementById("f-payment").value,
   };
   if (!payload.name || Number.isNaN(payload.total_price) || !payload.start_date) {
     alert("請完整填寫表單");
     return;
   }
   try {
-    await api.post("/api/packages", payload);
+    if (editingId) {
+      await api.put(`/api/packages/${editingId}`, payload);
+    } else {
+      await api.post("/api/packages", {
+        ...payload,
+        student_id: parseInt(document.getElementById("f-student").value, 10),
+        total_sessions: 8,
+        payment_status: document.getElementById("f-payment").value,
+      });
+    }
     closeModal();
     await loadPackages();
   } catch (err) {
@@ -162,10 +181,13 @@ async function handleListClick(e) {
     } catch (err) {
       alert("更新收款狀態失敗：" + err.message);
     }
+  } else if (btn.dataset.action === "edit") {
+    const pkg = await api.get(`/api/packages/${id}`);
+    openModal(pkg);
   } else if (btn.dataset.action === "settlement") {
     await openSettlementModal(id);
   } else if (btn.dataset.action === "delete") {
-    if (confirm("確定要刪除這個包嗎？包底下所有課程也會一併刪除。")) {
+    if (confirm("確定要刪除這個套組嗎？套組底下所有課程也會一併刪除。")) {
       try {
         await api.delete(`/api/packages/${id}`);
         await loadPackages();
@@ -179,7 +201,7 @@ async function handleListClick(e) {
 document.addEventListener("DOMContentLoaded", async () => {
   await loadOptions();
   await loadPackages();
-  document.getElementById("btn-add").addEventListener("click", openModal);
+  document.getElementById("btn-add").addEventListener("click", () => openModal(null));
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("package-form").addEventListener("submit", handleSave);
   document.getElementById("package-list").addEventListener("click", handleListClick);
