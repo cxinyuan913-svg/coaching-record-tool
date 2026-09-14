@@ -119,6 +119,8 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
             detail="套組課程請假請使用 /api/lessons/{id}/leave 端點（會自動順延一堂）",
         )
 
+    was_leave = db_lesson.status == LessonStatus.LEAVE
+
     db_lesson.student_id = lesson.student_id
     db_lesson.venue_id = lesson.venue_id
     db_lesson.date = lesson.date
@@ -128,10 +130,25 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     db_lesson.status = lesson.status
 
     if is_package_lesson:
+        if was_leave and lesson.status != LessonStatus.LEAVE:
+            # 復原請假：移除當初順延補的那堂（若尚未上課過），並恢復扣堂
+            makeup = (
+                db.query(models.Lesson)
+                .filter(
+                    models.Lesson.makeup_for_lesson_id == db_lesson.id,
+                    models.Lesson.status == LessonStatus.SCHEDULED,
+                )
+                .first()
+            )
+            if makeup is not None:
+                db.delete(makeup)
+            db_lesson.deduct_session = True
+
         # 套組課程的收款狀態一律隨套組；金額依該堂時長占套組總時長的比例重新分攤（見對話紀錄）
         package = db.get(models.Package, db_lesson.package_id)
         db_lesson.payment_status = package.payment_status
         db_lesson.payment_date = package.payment_date
+        db.flush()  # 確保 recompute 查不到剛刪除的補課堂
         recompute_remaining_sessions(db, package)
         recompute_package_pricing(db, package)
         sync_headcount_diff_adjustment(db, db_lesson, student)
