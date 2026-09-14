@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>課程包 - 羽球教練紀錄工具</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/">行事曆</a>
+    <a href="/students.html">學生管理</a>
+    <a href="/packages.html">課程包</a>
+    <a href="/venues.html">場地管理</a>
+    <a href="/price_rules.html">價目表</a>
+  </nav>
+  <main>
+    <div class="toolbar">
+      <h1>課程包</h1>
+      <button id="btn-add">新增包</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>學生</th>
+          <th>名稱</th>
+          <th>時長</th>
+          <th>剩餘/總堂數</th>
+          <th>單堂攤提</th>
+          <th>狀態</th>
+          <th>收款</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="package-list"></tbody>
+    </table>
+  </main>
+
+  <div class="modal-backdrop" id="package-modal">
+    <div class="modal">
+      <h2>新增包（批次排課）</h2>
+      <form id="package-form">
+        <div class="form-row">
+          <label for="f-student">學生</label>
+          <select id="f-student" required></select>
+        </div>
+        <div class="form-row">
+          <label for="f-name">包名稱</label>
+          <input id="f-name" type="text" required />
+        </div>
+        <div class="form-row">
+          <label for="f-duration">單堂時長（分鐘）</label>
+          <select id="f-duration">
+            <option value="60">60</option>
+            <option value="120">120</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="f-total-price">總金額</label>
+          <input id="f-total-price" type="number" min="0" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="f-purchased-date">購買日期</label>
+          <input id="f-purchased-date" type="date" required />
+        </div>
+        <div class="form-row">
+          <label for="f-start-date">第一堂日期</label>
+          <input id="f-start-date" type="date" required />
+        </div>
+        <div class="form-row">
+          <label for="f-weekday">每週上課日</label>
+          <select id="f-weekday"></select>
+        </div>
+        <div class="form-row">
+          <label for="f-recur-time">上課時段</label>
+          <input id="f-recur-time" type="time" required />
+        </div>
+        <div class="form-row">
+          <label for="f-venue">預設場地</label>
+          <select id="f-venue" required></select>
+        </div>
+        <div class="form-row">
+          <label for="f-payment">收款狀態</label>
+          <select id="f-payment">
+            <option value="unpaid">未收款</option>
+            <option value="paid">已收款</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="btn-cancel">取消</button>
+          <button type="submit">儲存並批次排課</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/packages.js"></script>
+</body>
+</html>

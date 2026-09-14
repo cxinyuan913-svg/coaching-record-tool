@@ -5,15 +5,28 @@ const TIER_LABEL = { new: "新生", friend: "朋友", regular: "熟客" };
 let editingId = null;
 
 async function loadStudents() {
-  const students = await api.get("/api/students");
+  const [students, packages] = await Promise.all([
+    api.get("/api/students"),
+    api.get("/api/packages?status=active"),
+  ]);
+  const packagesByStudent = {};
+  packages.forEach((p) => {
+    (packagesByStudent[p.student_id] = packagesByStudent[p.student_id] || []).push(p);
+  });
+
   const tbody = document.getElementById("student-list");
   tbody.innerHTML = "";
   students.forEach((s) => {
+    const pkgs = packagesByStudent[s.id] || [];
+    const pkgSummary = pkgs
+      .map((p) => `${escapeHtml(p.name)}（${p.remaining_sessions}/${p.total_sessions}）`)
+      .join("、");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(s.name)}</td>
       <td>${escapeHtml(s.contact || "")}</td>
       <td>${TIER_LABEL[s.tier] || s.tier}</td>
+      <td>${pkgSummary || "—"}</td>
       <td>${escapeHtml(s.note || "")}</td>
       <td>
         <button class="secondary" data-action="edit" data-id="${s.id}">編輯</button>
