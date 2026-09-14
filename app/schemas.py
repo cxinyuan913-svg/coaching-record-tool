@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models import BookingStatus, LessonStatus, PaymentStatus, Tier
+from app.models import AdjustmentType, BookingStatus, LessonStatus, PackageStatus, PaymentStatus, Tier
 
 
 class VenueBase(BaseModel):
@@ -104,6 +104,7 @@ class LessonOut(BaseModel):
     venue_id: int
     venue_name: str
     package_id: int | None
+    package_total_sessions: int | None
     date: date
     start_time: time
     duration: int
@@ -117,3 +118,58 @@ class LessonOut(BaseModel):
     payment_status: PaymentStatus
     payment_date: date | None
     revenue_amount: float
+
+
+class LessonLeaveRequest(BaseModel):
+    makeup_date: date | None = None
+    makeup_start_time: time | None = None
+
+
+class LessonLeaveResult(BaseModel):
+    leave_lesson: LessonOut
+    makeup_lesson: LessonOut
+
+
+class PackageBase(BaseModel):
+    student_id: int
+    name: str
+    session_duration: int
+    total_sessions: int = 8
+    total_price: float
+    purchased_date: date
+    start_date: date
+    recur_weekday: int
+    recur_start_time: time
+    default_venue_id: int
+    payment_status: PaymentStatus = PaymentStatus.UNPAID
+
+
+class PackageCreate(PackageBase):
+    pass
+
+
+class PackagePaymentUpdate(BaseModel):
+    payment_status: PaymentStatus
+
+
+class PackageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: int
+    student_name: str
+    name: str
+    session_duration: int
+    total_sessions: int
+    remaining_sessions: int
+    total_price: float
+    price_per_session: float
+    purchased_date: date
+    start_date: date
+    recur_weekday: int
+    recur_start_time: time
+    default_venue_id: int
+    venue_name: str
+    status: PackageStatus
+    payment_status: PaymentStatus
+    payment_date: date | None

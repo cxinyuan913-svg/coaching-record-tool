@@ -1,4 +1,5 @@
-"""課程 CRUD API（階段一：僅單堂制，package_id 固定為 NULL）。"""
+"""課程 CRUD API。單堂制（package_id 為 NULL）可自由編輯金額與收款狀態；
+包制課程（package_id 有值）的金額與收款狀態一律由所屬包控管，並提供請假順延端點。"""
 from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.models import PaymentStatus
+from app.models import LessonStatus, PaymentStatus
+from app.package_logic import mark_leave_and_reschedule, recompute_remaining_sessions
 from app.pricing import resolve_price
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
@@ -20,6 +22,7 @@ def _to_out(lesson: models.Lesson) -> schemas.LessonOut:
         venue_id=lesson.venue_id,
         venue_name=lesson.venue.name,
         package_id=lesson.package_id,
+        package_total_sessions=lesson.package.total_sessions if lesson.package_id else None,
         date=lesson.date,
         start_time=lesson.start_time,
         duration=lesson.duration,
@@ -53,6 +56,7 @@ def list_lessons(
 
 @router.post("", response_model=schemas.LessonOut, status_code=201)
 def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
+    """僅建立單堂制課程；包制課程一律透過「新增包」批次產生。"""
     student = db.get(models.Student, lesson.student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="學生不存在")
@@ -102,9 +106,12 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     if venue is None:
         raise HTTPException(status_code=404, detail="場地不存在")
 
-    if db_lesson.payment_status != lesson.payment_status:
-        db_lesson.payment_date = (
-            date_type.today() if lesson.payment_status == PaymentStatus.PAID else None
+    is_package_lesson = db_lesson.package_id is not None
+
+    if is_package_lesson and lesson.status == LessonStatus.LEAVE and db_lesson.status != LessonStatus.LEAVE:
+        raise HTTPException(
+            status_code=400,
+            detail="包制課程請假請使用 /api/lessons/{id}/leave 端點（會自動順延一堂）",
         )
 
     db_lesson.student_id = lesson.student_id
@@ -114,12 +121,47 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     db_lesson.duration = lesson.duration
     db_lesson.headcount = lesson.headcount
     db_lesson.status = lesson.status
-    db_lesson.payment_status = lesson.payment_status
-    db_lesson.revenue_amount = lesson.revenue_amount
+
+    if is_package_lesson:
+        # 包制課程的金額與收款狀態一律隨包，不可個別覆寫
+        package = db.get(models.Package, db_lesson.package_id)
+        db_lesson.revenue_amount = package.price_per_session
+        db_lesson.payment_status = package.payment_status
+        db_lesson.payment_date = package.payment_date
+        recompute_remaining_sessions(db, package)
+    else:
+        if db_lesson.payment_status != lesson.payment_status:
+            db_lesson.payment_date = (
+                date_type.today() if lesson.payment_status == PaymentStatus.PAID else None
+            )
+        db_lesson.payment_status = lesson.payment_status
+        db_lesson.revenue_amount = lesson.revenue_amount
 
     db.commit()
     db.refresh(db_lesson)
     return _to_out(db_lesson)
+
+
+@router.post("/{lesson_id}/leave", response_model=schemas.LessonLeaveResult)
+def leave_lesson(
+    lesson_id: int, payload: schemas.LessonLeaveRequest, db: Session = Depends(get_db)
+):
+    """包制課程請假順延：標記該堂請假並自動產生順延一堂（見 SPEC.md 請假順延）。"""
+    db_lesson = db.get(models.Lesson, lesson_id)
+    if db_lesson is None:
+        raise HTTPException(status_code=404, detail="課程不存在")
+    if db_lesson.package_id is None:
+        raise HTTPException(status_code=400, detail="單堂制課程無需順延，請直接編輯狀態")
+
+    makeup_lesson = mark_leave_and_reschedule(
+        db, db_lesson, payload.makeup_date, payload.makeup_start_time
+    )
+    db.commit()
+    db.refresh(db_lesson)
+    db.refresh(makeup_lesson)
+    return schemas.LessonLeaveResult(
+        leave_lesson=_to_out(db_lesson), makeup_lesson=_to_out(makeup_lesson)
+    )
 
 
 @router.patch("/{lesson_id}/payment", response_model=schemas.LessonOut)
@@ -129,6 +171,10 @@ def update_payment_status(
     db_lesson = db.get(models.Lesson, lesson_id)
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="課程不存在")
+    if db_lesson.package_id is not None:
+        raise HTTPException(
+            status_code=400, detail="包制課程的收款狀態請透過該包的付款端點切換"
+        )
     db_lesson.payment_status = payload.payment_status
     db_lesson.payment_date = (
         date_type.today() if payload.payment_status == PaymentStatus.PAID else None
@@ -143,5 +189,10 @@ def delete_lesson(lesson_id: int, db: Session = Depends(get_db)):
     db_lesson = db.get(models.Lesson, lesson_id)
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="課程不存在")
+    package_id = db_lesson.package_id
     db.delete(db_lesson)
+    if package_id is not None:
+        package = db.get(models.Package, package_id)
+        if package is not None:
+            recompute_remaining_sessions(db, package)
     db.commit()
