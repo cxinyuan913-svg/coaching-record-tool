@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <title>行事曆 - 羽球教練紀錄工具</title>
   <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales/zh-tw.global.min.js"></script>
 </head>
 <body>
   <nav class="topnav">
@@ -14,8 +16,67 @@
   </nav>
   <main>
     <h1>行事曆</h1>
-    <p>（建置中）</p>
+    <div id="calendar"></div>
   </main>
+
+  <div class="modal-backdrop" id="lesson-modal">
+    <div class="modal">
+      <h2 id="modal-title">新增課程</h2>
+      <form id="lesson-form">
+        <div class="form-row">
+          <label for="f-student">學生</label>
+          <select id="f-student" required></select>
+        </div>
+        <div class="form-row">
+          <label for="f-venue">場地</label>
+          <select id="f-venue" required></select>
+        </div>
+        <div class="form-row">
+          <label for="f-date">日期</label>
+          <input id="f-date" type="date" required />
+        </div>
+        <div class="form-row">
+          <label for="f-time">時間</label>
+          <input id="f-time" type="time" required />
+        </div>
+        <div class="form-row">
+          <label for="f-duration">時長（分鐘）</label>
+          <input id="f-duration" type="number" min="1" value="60" required />
+        </div>
+        <div class="form-row">
+          <label for="f-headcount">人數</label>
+          <input id="f-headcount" type="number" min="1" value="1" required />
+        </div>
+        <div class="form-row">
+          <label for="f-amount">金額（自動依價目表帶入，可覆寫）</label>
+          <input id="f-amount" type="number" min="0" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="f-payment">收款狀態</label>
+          <select id="f-payment">
+            <option value="unpaid">未收款</option>
+            <option value="paid">已收款</option>
+          </select>
+        </div>
+        <div class="form-row" id="row-status" style="display: none">
+          <label for="f-status">課程狀態</label>
+          <select id="f-status">
+            <option value="scheduled">排定</option>
+            <option value="completed">已完成</option>
+            <option value="cancelled">取消</option>
+            <option value="leave">請假</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="danger" id="btn-delete" style="display: none">刪除</button>
+          <button type="button" class="secondary" id="btn-cancel">取消</button>
+          <button type="submit">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/static/js/common.js"></script>
+  <script src="/static/js/calendar.js"></script>
 </body>
 </html>
