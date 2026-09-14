@@ -1,0 +1,27 @@
+"""Pydantic schemas：API 輸入輸出格式。"""
+from datetime import time
+
+from pydantic import BaseModel, ConfigDict
+
+
+class VenueBase(BaseModel):
+    name: str
+    address: str | None = None
+    booking_open_days_before: int = 0
+    booking_open_time: time = time(0, 0)
+    cancellation_policy: str | None = None
+    note: str | None = None
+
+
+class VenueCreate(VenueBase):
+    pass
+
+
+class VenueUpdate(VenueBase):
+    pass
+
+
+class VenueOut(VenueBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
