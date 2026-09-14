@@ -3,6 +3,8 @@ from datetime import time
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models import Tier
+
 
 class VenueBase(BaseModel):
     name: str
@@ -22,6 +24,27 @@ class VenueUpdate(VenueBase):
 
 
 class VenueOut(VenueBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+
+
+class PriceRuleBase(BaseModel):
+    headcount_min: int
+    headcount_max: int
+    tier: Tier
+    price: float
+
+
+class PriceRuleCreate(PriceRuleBase):
+    pass
+
+
+class PriceRuleUpdate(PriceRuleBase):
+    pass
+
+
+class PriceRuleOut(PriceRuleBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
