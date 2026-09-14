@@ -47,11 +47,15 @@
           <label for="f-address">地址</label>
           <input id="f-address" type="text" />
         </div>
-        <div class="form-row">
+        <div class="form-row" style="flex-direction: row; align-items: center; gap: 6px">
+          <input id="f-anytime" type="checkbox" style="width: auto" />
+          <label for="f-anytime" style="margin: 0">隨時可訂（無開放時間限制）</label>
+        </div>
+        <div class="form-row" id="row-days">
           <label for="f-days">提前幾天開放預訂</label>
           <input id="f-days" type="number" min="0" value="0" />
         </div>
-        <div class="form-row">
+        <div class="form-row" id="row-time">
           <label for="f-time">開放時刻</label>
           <input id="f-time" type="time" value="00:00" />
         </div>

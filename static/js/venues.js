@@ -11,7 +11,11 @@ async function loadVenues() {
     tr.innerHTML = `
       <td>${escapeHtml(v.name)}</td>
       <td>${escapeHtml(v.address || "")}</td>
-      <td>提前 ${v.booking_open_days_before} 天 ${v.booking_open_time}</td>
+      <td>${
+        v.booking_open_days_before == null
+          ? "隨時可訂"
+          : `提前 ${v.booking_open_days_before} 天 ${v.booking_open_time}`
+      }</td>
       <td>${escapeHtml(v.cancellation_policy || "")}</td>
       <td>
         <button class="secondary" data-action="edit" data-id="${v.id}">編輯</button>
@@ -28,15 +32,26 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function toggleAnytimeFields() {
+  const anytime = document.getElementById("f-anytime").checked;
+  document.getElementById("row-days").style.display = anytime ? "none" : "";
+  document.getElementById("row-time").style.display = anytime ? "none" : "";
+}
+
 function openModal(venue) {
   editingId = venue ? venue.id : null;
+  const isAnytime = !!venue && venue.booking_open_days_before == null;
   document.getElementById("modal-title").textContent = venue ? "編輯場地" : "新增場地";
   document.getElementById("f-name").value = venue ? venue.name : "";
   document.getElementById("f-address").value = venue ? venue.address || "" : "";
-  document.getElementById("f-days").value = venue ? venue.booking_open_days_before : 0;
-  document.getElementById("f-time").value = venue ? venue.booking_open_time.slice(0, 5) : "00:00";
+  document.getElementById("f-anytime").checked = isAnytime;
+  document.getElementById("f-days").value =
+    venue && venue.booking_open_days_before != null ? venue.booking_open_days_before : 0;
+  document.getElementById("f-time").value =
+    venue && venue.booking_open_time ? venue.booking_open_time.slice(0, 5) : "00:00";
   document.getElementById("f-policy").value = venue ? venue.cancellation_policy || "" : "";
   document.getElementById("f-note").value = venue ? venue.note || "" : "";
+  toggleAnytimeFields();
   document.getElementById("venue-modal").classList.add("open");
 }
 
@@ -46,11 +61,14 @@ function closeModal() {
 
 async function handleSave(e) {
   e.preventDefault();
+  const isAnytime = document.getElementById("f-anytime").checked;
   const payload = {
     name: document.getElementById("f-name").value.trim(),
     address: document.getElementById("f-address").value.trim() || null,
-    booking_open_days_before: parseInt(document.getElementById("f-days").value, 10) || 0,
-    booking_open_time: document.getElementById("f-time").value + ":00",
+    booking_open_days_before: isAnytime
+      ? null
+      : parseInt(document.getElementById("f-days").value, 10) || 0,
+    booking_open_time: isAnytime ? null : document.getElementById("f-time").value + ":00",
     cancellation_policy: document.getElementById("f-policy").value.trim() || null,
     note: document.getElementById("f-note").value.trim() || null,
   };
@@ -96,4 +114,5 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("venue-form").addEventListener("submit", handleSave);
   document.getElementById("venue-list").addEventListener("click", handleListClick);
+  document.getElementById("f-anytime").addEventListener("change", toggleAnytimeFields);
 });

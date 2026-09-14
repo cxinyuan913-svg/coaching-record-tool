@@ -9,8 +9,9 @@ from app.models import AdjustmentType, BookingStatus, LessonStatus, PackageStatu
 class VenueBase(BaseModel):
     name: str
     address: str | None = None
-    booking_open_days_before: int = 0
-    booking_open_time: time = time(0, 0)
+    # 兩者皆為 None 代表「隨時可訂」，不受開放時間限制
+    booking_open_days_before: int | None = 0
+    booking_open_time: time | None = time(0, 0)
     cancellation_policy: str | None = None
     note: str | None = None
 
@@ -214,7 +215,7 @@ class BookingStatusUpdate(BaseModel):
 
 class BookingCheckItem(BaseModel):
     lesson: LessonOut
-    booking_open_at: datetime
+    booking_open_at: datetime | None  # None = 該場地隨時可訂，無開放時間限制
 
 
 class BookingCheckSummary(BaseModel):
