@@ -173,3 +173,36 @@ class PackageOut(BaseModel):
     status: PackageStatus
     payment_status: PaymentStatus
     payment_date: date | None
+
+
+class RevenueStats(BaseModel):
+    week: float
+    month: float
+    year: float
+    total: float
+
+
+class AdjustmentBase(BaseModel):
+    lesson_id: int
+    package_id: int | None = None
+    type: AdjustmentType
+    amount: float
+    note: str | None = None
+
+
+class AdjustmentCreate(AdjustmentBase):
+    pass
+
+
+class AdjustmentOut(AdjustmentBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    settled: bool
+    settled_at: datetime | None
+
+
+class UnpaidSummary(BaseModel):
+    unpaid_lessons: list[LessonOut]
+    unpaid_packages: list[PackageOut]
+    unsettled_adjustments: list[AdjustmentOut]
