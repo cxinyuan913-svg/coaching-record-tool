@@ -1,0 +1,170 @@
+/* 共用樣式：導覽列、表格、表單、Modal */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  background: #f5f6f8;
+  color: #222;
+}
+
+nav.topnav {
+  display: flex;
+  gap: 4px;
+  background: #2d3142;
+  padding: 0 16px;
+}
+
+nav.topnav a {
+  color: #d8dae3;
+  text-decoration: none;
+  padding: 14px 16px;
+  font-size: 14px;
+}
+
+nav.topnav a:hover,
+nav.topnav a.active {
+  color: #fff;
+  background: #40465e;
+}
+
+main {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+h1 {
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+
+th {
+  background: #eef0f4;
+  font-weight: 600;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: #4a5cff;
+  color: #fff;
+}
+
+button.secondary {
+  background: #cfd2dc;
+  color: #333;
+}
+
+button.danger {
+  background: #e35555;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* Modal */
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-backdrop.open {
+  display: flex;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px 24px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.form-row {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-row label {
+  font-size: 13px;
+  color: #555;
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* FullCalendar 事件色塊 */
+.fc-event.status-unpaid {
+  background: #f4b350;
+  border-color: #f4b350;
+  color: #3a2b00;
+}
+
+.fc-event.status-paid {
+  background: #b6e3c6;
+  border-color: #b6e3c6;
+  color: #1b4d2e;
+}
+
+.fc-event.status-cancelled,
+.fc-event.status-leave {
+  background: transparent;
+  border: 1px dashed #999;
+  color: #777;
+}
