@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>未收款清單 - 羽球教練紀錄工具</title>
+  <title>訂場檢查 - 羽球教練紀錄工具</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -17,57 +17,59 @@
     <a href="/booking.html">訂場檢查</a>
   </nav>
   <main>
-    <h1>未收款清單</h1>
+    <h1>訂場檢查</h1>
 
     <div class="section-block">
-      <h2>課程未收款（單堂制）</h2>
+      <h2>可訂未訂（請盡快訂場）</h2>
       <table>
         <thead>
           <tr>
             <th>日期</th>
             <th>學生</th>
             <th>場地</th>
-            <th>金額</th>
+            <th>狀態</th>
             <th>操作</th>
           </tr>
         </thead>
-        <tbody id="unpaid-lessons"></tbody>
+        <tbody id="need-booking"></tbody>
       </table>
     </div>
 
     <div class="section-block">
-      <h2>包未收款</h2>
-      <table>
+      <details>
+        <summary><h2 style="display:inline">尚未開放（點擊展開）</h2></summary>
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>學生</th>
+              <th>場地</th>
+              <th>開放時間</th>
+            </tr>
+          </thead>
+          <tbody id="not-yet-open"></tbody>
+        </table>
+      </details>
+    </div>
+
+    <div class="section-block">
+      <h2>已訂</h2>
+      <table class="dimmed-table">
         <thead>
           <tr>
+            <th>日期</th>
             <th>學生</th>
-            <th>包名稱</th>
-            <th>總金額</th>
-            <th>剩餘/總堂數</th>
+            <th>場地</th>
+            <th>訂場時間</th>
             <th>操作</th>
           </tr>
         </thead>
-        <tbody id="unpaid-packages"></tbody>
-      </table>
-    </div>
-
-    <div class="section-block">
-      <h2>未結清差額</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>類型</th>
-            <th>金額</th>
-            <th>備註</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="unsettled-adjustments"></tbody>
+        <tbody id="already-booked"></tbody>
       </table>
     </div>
   </main>
 
   <script src="/static/js/common.js"></script>
-  <script src="/static/js/unpaid.js"></script>
+  <script src="/static/js/booking.js"></script>
 </body>
 </html>
