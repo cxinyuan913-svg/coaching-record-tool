@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
+from app.models import Tier
+from app.pricing import resolve_price
 
 router = APIRouter(prefix="/api/price_rules", tags=["price_rules"])
 
@@ -11,6 +13,12 @@ router = APIRouter(prefix="/api/price_rules", tags=["price_rules"])
 @router.get("", response_model=list[schemas.PriceRuleOut])
 def list_price_rules(db: Session = Depends(get_db)):
     return db.query(models.PriceRule).order_by(models.PriceRule.headcount_min).all()
+
+
+@router.get("/resolve")
+def resolve_price_endpoint(tier: Tier, headcount: int, db: Session = Depends(get_db)):
+    """依 tier 與人數查價目表，供表單即時預覽金額使用。"""
+    return {"price": resolve_price(db, tier, headcount)}
 
 
 @router.post("", response_model=schemas.PriceRuleOut, status_code=201)
