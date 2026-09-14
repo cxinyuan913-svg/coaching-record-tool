@@ -67,11 +67,28 @@ async function fetchEvents(fetchInfo, successCallback, failureCallback) {
   }
 }
 
+const mobileQuery = window.matchMedia("(max-width: 640px)");
+
+function applyResponsiveView() {
+  if (!calendar) return;
+  const isMobile = mobileQuery.matches;
+  const targetView = isMobile ? "listWeek" : "dayGridMonth";
+  if (calendar.view.type !== targetView) {
+    calendar.changeView(targetView);
+  }
+  calendar.setOption(
+    "headerToolbar",
+    isMobile
+      ? { left: "prev,next today", center: "title", right: "" }
+      : { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek" }
+  );
+}
+
 function initCalendar() {
   const calendarEl = document.getElementById("calendar");
   calendar = new FullCalendar.Calendar(calendarEl, {
     locale: "zh-tw",
-    initialView: "dayGridMonth",
+    initialView: mobileQuery.matches ? "listWeek" : "dayGridMonth",
     headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek" },
     dayMaxEvents: 3,
     events: fetchEvents,
@@ -79,6 +96,8 @@ function initCalendar() {
     eventClick: (info) => openEditModal(parseInt(info.event.extendedProps.lessonId, 10)),
   });
   calendar.render();
+  applyResponsiveView();
+  mobileQuery.addEventListener("change", applyResponsiveView);
 }
 
 async function refreshSuggestedPrice() {
@@ -302,4 +321,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("f-headcount").addEventListener("input", refreshSuggestedPrice);
   document.getElementById("btn-add-adjustment").addEventListener("click", handleAddAdjustment);
   document.getElementById("adjustment-list").addEventListener("click", handleAdjustmentListClick);
+  document.getElementById("btn-add-lesson").addEventListener("click", () => {
+    openCreateModal(new Date().toISOString().slice(0, 10));
+  });
 });

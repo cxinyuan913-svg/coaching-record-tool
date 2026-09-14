@@ -15,6 +15,8 @@ nav.topnav {
   gap: 4px;
   background: #2d3142;
   padding: 0 16px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 nav.topnav a {
@@ -22,6 +24,7 @@ nav.topnav a {
   text-decoration: none;
   padding: 14px 16px;
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 nav.topnav a:hover,
@@ -34,6 +37,7 @@ main {
   max-width: 1100px;
   margin: 24px auto;
   padding: 0 16px;
+  overflow-x: auto;
 }
 
 h1 {
@@ -100,6 +104,7 @@ button.danger {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  padding: 16px;
 }
 
 .modal-backdrop.open {
@@ -216,4 +221,28 @@ details summary {
 
 details table {
   margin-top: 8px;
+}
+
+/* 手機版適配 */
+@media (max-width: 640px) {
+  main {
+    margin: 12px auto;
+    padding: 0 10px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  th,
+  td {
+    padding: 8px;
+    font-size: 13px;
+  }
+
+  .modal {
+    max-width: 100%;
+  }
 }
