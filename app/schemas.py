@@ -1,9 +1,9 @@
 """Pydantic schemas：API 輸入輸出格式。"""
-from datetime import time
+from datetime import date, datetime, time
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models import Tier
+from app.models import BookingStatus, LessonStatus, PaymentStatus, Tier
 
 
 class VenueBase(BaseModel):
@@ -69,3 +69,51 @@ class StudentOut(StudentBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+
+
+class LessonBase(BaseModel):
+    student_id: int
+    venue_id: int
+    date: date
+    start_time: time
+    duration: int
+    headcount: int = 1
+    payment_status: PaymentStatus = PaymentStatus.UNPAID
+    revenue_amount: float | None = None
+
+
+class LessonCreate(LessonBase):
+    pass
+
+
+class LessonUpdate(LessonBase):
+    status: LessonStatus = LessonStatus.SCHEDULED
+    revenue_amount: float
+
+
+class LessonPaymentUpdate(BaseModel):
+    payment_status: PaymentStatus
+
+
+class LessonOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: int
+    student_name: str
+    venue_id: int
+    venue_name: str
+    package_id: int | None
+    date: date
+    start_time: time
+    duration: int
+    headcount: int
+    sequence_no: int | None
+    status: LessonStatus
+    deduct_session: bool
+    makeup_for_lesson_id: int | None
+    booking_status: BookingStatus
+    booked_at: datetime | None
+    payment_status: PaymentStatus
+    payment_date: date | None
+    revenue_amount: float
