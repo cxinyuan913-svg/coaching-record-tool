@@ -168,3 +168,39 @@ button.danger {
   border: 1px dashed #999;
   color: #777;
 }
+
+/* 統計卡片 */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #777;
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #2d3142;
+}
+
+/* 未收款清單 */
+.section-block {
+  margin-bottom: 28px;
+}
+
+.section-block h2 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
