@@ -51,11 +51,12 @@
           <input id="f-name" type="text" required />
         </div>
         <div class="form-row">
-          <label for="f-duration">單堂時長（分鐘）</label>
-          <select id="f-duration">
-            <option value="60">60</option>
-            <option value="120">120</option>
-          </select>
+          <label for="f-duration">標準單堂時長</label>
+          <select id="f-duration" required></select>
+        </div>
+        <div class="form-row">
+          <label for="f-total-sessions">總堂數</label>
+          <input id="f-total-sessions" type="number" min="1" step="1" value="8" required />
         </div>
         <div class="form-row">
           <label for="f-total-price">總金額</label>
@@ -90,7 +91,7 @@
           </select>
         </div>
         <p id="edit-note" style="display: none; font-size: 13px; color: #888">
-          編輯不會重新產生堂數；已排好的課程請到行事曆個別改期。收款狀態請用列表上的按鈕切換。
+          編輯不會自動增減課程堂數；已排好的課程請到行事曆個別改期或刪除。總堂數只影響剩餘堂數與金額分攤的計算基準。收款狀態請用列表上的按鈕切換。
         </p>
         <div class="modal-actions">
           <button type="button" class="secondary" id="btn-cancel">取消</button>

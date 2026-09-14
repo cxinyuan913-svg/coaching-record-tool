@@ -24,6 +24,7 @@ async function loadOptions() {
   populateSelect("f-student", students, (s) => `${s.name}（${TIER_LABEL[s.tier]}）`);
   populateSelect("f-venue", venues, (v) => v.name);
   populateTimeSelects("f-recur-time-hour", "f-recur-time-minute", false);
+  populateDurationSelect("f-duration");
 }
 
 // 依「第一堂日期」自動推算每週固定上課星期幾，不需要另外詢問
@@ -48,7 +49,7 @@ async function loadPackages() {
     tr.innerHTML = `
       <td>${escapeHtml(p.student_name)}</td>
       <td>${escapeHtml(p.name)}</td>
-      <td>${p.session_duration} 分</td>
+      <td>${minutesToHourLabel(p.session_duration)}</td>
       <td>${p.remaining_sessions} / ${p.total_sessions}</td>
       <td>${p.price_per_session}</td>
       <td>${STATUS_LABEL[p.status] || p.status}</td>
@@ -86,6 +87,7 @@ function openModal(pkg) {
   document.getElementById("f-venue").value = pkg ? pkg.default_venue_id : venues[0]?.id ?? "";
   document.getElementById("f-name").value = pkg ? pkg.name : "8堂1小時套組";
   document.getElementById("f-duration").value = pkg ? pkg.session_duration : "60";
+  document.getElementById("f-total-sessions").value = pkg ? pkg.total_sessions : 8;
   document.getElementById("f-total-price").value = pkg ? pkg.total_price : "";
   document.getElementById("f-purchased-date").value = pkg
     ? pkg.purchased_date
@@ -111,6 +113,7 @@ async function handleSave(e) {
   const payload = {
     name: document.getElementById("f-name").value.trim(),
     session_duration: parseInt(document.getElementById("f-duration").value, 10),
+    total_sessions: parseInt(document.getElementById("f-total-sessions").value, 10),
     total_price: parseFloat(document.getElementById("f-total-price").value),
     purchased_date: document.getElementById("f-purchased-date").value,
     start_date: document.getElementById("f-start-date").value,
@@ -118,8 +121,14 @@ async function handleSave(e) {
     recur_start_time: getTimeSelectValue("f-recur-time-hour", "f-recur-time-minute") + ":00",
     default_venue_id: parseInt(document.getElementById("f-venue").value, 10),
   };
-  if (!payload.name || Number.isNaN(payload.total_price) || !payload.start_date) {
-    alert("請完整填寫表單");
+  if (
+    !payload.name ||
+    Number.isNaN(payload.total_price) ||
+    !payload.start_date ||
+    !payload.total_sessions ||
+    payload.total_sessions < 1
+  ) {
+    alert("請完整填寫表單（總堂數需至少為 1）");
     return;
   }
   try {
@@ -129,7 +138,6 @@ async function handleSave(e) {
       await api.post("/api/packages", {
         ...payload,
         student_id: parseInt(document.getElementById("f-student").value, 10),
-        total_sessions: 8,
         payment_status: document.getElementById("f-payment").value,
       });
     }

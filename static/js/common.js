@@ -71,6 +71,22 @@ function getTimeSelectValue(hourSelectId, minuteSelectId) {
   return h && m ? `${h}:${m}` : "";
 }
 
+// 時長選單（小時制，半小時為單位）：0.5 小時 ~ 3 小時，值為分鐘數字串
+function minutesToHourLabel(minutes) {
+  return `${minutes / 60} 小時`;
+}
+
+function populateDurationSelect(selectId, maxMinutes) {
+  const select = document.getElementById(selectId);
+  select.innerHTML = "";
+  for (let m = 30; m <= (maxMinutes || 180); m += 30) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = minutesToHourLabel(m);
+    select.appendChild(opt);
+  }
+}
+
 function highlightActiveNav() {
   const path = window.location.pathname;
   document.querySelectorAll("nav.topnav a").forEach((a) => {

@@ -22,6 +22,7 @@ async function loadOptions() {
   populateSelect("f-student", students, (s) => s.name);
   populateSelect("f-venue", venues, (v) => v.name);
   populateTimeSelects("f-time-hour", "f-time-minute", true);
+  populateDurationSelect("f-duration");
 }
 
 function toDateOnly(isoStr) {

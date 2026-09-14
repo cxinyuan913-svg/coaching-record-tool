@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import LessonStatus, PaymentStatus
 from app.package_logic import (
     mark_leave_and_reschedule,
+    recompute_package_pricing,
     recompute_remaining_sessions,
     sync_headcount_diff_adjustment,
 )
@@ -127,12 +128,12 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     db_lesson.status = lesson.status
 
     if is_package_lesson:
-        # 套組課程的金額與收款狀態一律隨套組，不可個別覆寫
+        # 套組課程的收款狀態一律隨套組；金額依該堂時長占套組總時長的比例重新分攤（見對話紀錄）
         package = db.get(models.Package, db_lesson.package_id)
-        db_lesson.revenue_amount = package.price_per_session
         db_lesson.payment_status = package.payment_status
         db_lesson.payment_date = package.payment_date
         recompute_remaining_sessions(db, package)
+        recompute_package_pricing(db, package)
         sync_headcount_diff_adjustment(db, db_lesson, student)
     else:
         if db_lesson.payment_status != lesson.payment_status:
