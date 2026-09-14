@@ -21,6 +21,7 @@ async function loadOptions() {
   [students, venues] = await Promise.all([api.get("/api/students"), api.get("/api/venues")]);
   populateSelect("f-student", students, (s) => s.name);
   populateSelect("f-venue", venues, (v) => v.name);
+  populateTimeSelects("f-time-hour", "f-time-minute", true);
 }
 
 function toDateOnly(isoStr) {
@@ -126,7 +127,8 @@ function openCreateModal(dateStr) {
   document.getElementById("f-student").selectedIndex = 0;
   document.getElementById("f-venue").selectedIndex = 0;
   document.getElementById("f-date").value = dateStr || "";
-  document.getElementById("f-time").value = "";
+  document.getElementById("f-time-hour").value = "";
+  document.getElementById("f-time-minute").value = "";
   document.getElementById("f-duration").value = 60;
   document.getElementById("f-headcount").value = 1;
   document.getElementById("f-payment").value = "unpaid";
@@ -149,7 +151,7 @@ async function openEditModal(lessonId) {
   document.getElementById("f-student").value = lesson.student_id;
   document.getElementById("f-venue").value = lesson.venue_id;
   document.getElementById("f-date").value = lesson.date;
-  document.getElementById("f-time").value = lesson.start_time.slice(0, 5);
+  setTimeSelectValue("f-time-hour", "f-time-minute", lesson.start_time.slice(0, 5));
   document.getElementById("f-duration").value = lesson.duration;
   document.getElementById("f-headcount").value = lesson.headcount;
   document.getElementById("f-amount").value = lesson.revenue_amount;
@@ -279,7 +281,7 @@ async function handleSave(e) {
     student_id: parseInt(document.getElementById("f-student").value, 10),
     venue_id: parseInt(document.getElementById("f-venue").value, 10),
     date: document.getElementById("f-date").value,
-    start_time: roundToHalfHour(document.getElementById("f-time").value) + ":00",
+    start_time: getTimeSelectValue("f-time-hour", "f-time-minute") + ":00",
     duration: parseInt(document.getElementById("f-duration").value, 10),
     headcount: parseInt(document.getElementById("f-headcount").value, 10),
     payment_status: document.getElementById("f-payment").value,

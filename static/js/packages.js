@@ -23,14 +23,20 @@ async function loadOptions() {
   [students, venues] = await Promise.all([api.get("/api/students"), api.get("/api/venues")]);
   populateSelect("f-student", students, (s) => `${s.name}（${TIER_LABEL[s.tier]}）`);
   populateSelect("f-venue", venues, (v) => v.name);
-  const weekdaySelect = document.getElementById("f-weekday");
-  weekdaySelect.innerHTML = "";
-  WEEKDAY_LABEL.forEach((label, idx) => {
-    const opt = document.createElement("option");
-    opt.value = idx;
-    opt.textContent = label;
-    weekdaySelect.appendChild(opt);
-  });
+  populateTimeSelects("f-recur-time-hour", "f-recur-time-minute", false);
+}
+
+// 依「第一堂日期」自動推算每週固定上課星期幾，不需要另外詢問
+function weekdayOfDate(dateStr) {
+  if (!dateStr) return null;
+  return new Date(dateStr + "T00:00:00").getDay();
+}
+
+function updateWeekdayHint() {
+  const dateStr = document.getElementById("f-start-date").value;
+  const weekday = weekdayOfDate(dateStr);
+  document.getElementById("weekday-hint").textContent =
+    weekday === null ? "" : `→ 每週${WEEKDAY_LABEL[weekday]}固定上課`;
 }
 
 async function loadPackages() {
@@ -85,9 +91,13 @@ function openModal(pkg) {
     ? pkg.purchased_date
     : new Date().toISOString().slice(0, 10);
   document.getElementById("f-start-date").value = pkg ? pkg.start_date : "";
-  document.getElementById("f-weekday").value = pkg ? pkg.recur_weekday : "1";
-  document.getElementById("f-recur-time").value = pkg ? pkg.recur_start_time.slice(0, 5) : "18:00";
+  setTimeSelectValue(
+    "f-recur-time-hour",
+    "f-recur-time-minute",
+    pkg ? pkg.recur_start_time.slice(0, 5) : "18:00"
+  );
   document.getElementById("f-payment").value = "unpaid";
+  updateWeekdayHint();
   document.getElementById("package-modal").classList.add("open");
 }
 
@@ -104,8 +114,8 @@ async function handleSave(e) {
     total_price: parseFloat(document.getElementById("f-total-price").value),
     purchased_date: document.getElementById("f-purchased-date").value,
     start_date: document.getElementById("f-start-date").value,
-    recur_weekday: parseInt(document.getElementById("f-weekday").value, 10),
-    recur_start_time: roundToHalfHour(document.getElementById("f-recur-time").value) + ":00",
+    recur_weekday: weekdayOfDate(document.getElementById("f-start-date").value),
+    recur_start_time: getTimeSelectValue("f-recur-time-hour", "f-recur-time-minute") + ":00",
     default_venue_id: parseInt(document.getElementById("f-venue").value, 10),
   };
   if (!payload.name || Number.isNaN(payload.total_price) || !payload.start_date) {
@@ -209,4 +219,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("settlement-modal").classList.remove("open");
   });
   document.getElementById("btn-settle-all").addEventListener("click", handleSettleAll);
+  document.getElementById("f-start-date").addEventListener("change", updateWeekdayHint);
 });

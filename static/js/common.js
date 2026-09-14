@@ -28,14 +28,47 @@ const api = {
   delete: (url) => apiRequest("DELETE", url),
 };
 
-// 將 "HH:MM" 時間字串校正到最近的整點或半點（例如 18:12 -> 18:00、18:16 -> 18:30）
-function roundToHalfHour(timeStr) {
-  const [h, m] = timeStr.split(":").map(Number);
-  let totalMinutes = h * 60 + Math.round(m / 30) * 30;
-  totalMinutes = ((totalMinutes % 1440) + 1440) % 1440; // 避免超過 23:30 進位跨日
-  const rh = Math.floor(totalMinutes / 60);
-  const rm = totalMinutes % 60;
-  return `${String(rh).padStart(2, "0")}:${String(rm).padStart(2, "0")}`;
+// 時間選單（24 小時制，僅 00/30 分）：填入時／分兩個 select
+// withPlaceholder=true 會加一個未選取的空白選項，用於「新增課程」時強制使用者主動選時間
+function populateTimeSelects(hourSelectId, minuteSelectId, withPlaceholder) {
+  const hourSelect = document.getElementById(hourSelectId);
+  const minuteSelect = document.getElementById(minuteSelectId);
+  hourSelect.innerHTML = "";
+  minuteSelect.innerHTML = "";
+  if (withPlaceholder) {
+    const hOpt = document.createElement("option");
+    hOpt.value = "";
+    hOpt.textContent = "時";
+    hourSelect.appendChild(hOpt);
+    const mOpt = document.createElement("option");
+    mOpt.value = "";
+    mOpt.textContent = "分";
+    minuteSelect.appendChild(mOpt);
+  }
+  for (let h = 0; h < 24; h++) {
+    const opt = document.createElement("option");
+    opt.value = String(h).padStart(2, "0");
+    opt.textContent = String(h).padStart(2, "0");
+    hourSelect.appendChild(opt);
+  }
+  ["00", "30"].forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m;
+    minuteSelect.appendChild(opt);
+  });
+}
+
+function setTimeSelectValue(hourSelectId, minuteSelectId, hhmm) {
+  const [h, m] = hhmm.split(":");
+  document.getElementById(hourSelectId).value = h;
+  document.getElementById(minuteSelectId).value = Number(m) >= 30 ? "30" : "00";
+}
+
+function getTimeSelectValue(hourSelectId, minuteSelectId) {
+  const h = document.getElementById(hourSelectId).value;
+  const m = document.getElementById(minuteSelectId).value;
+  return h && m ? `${h}:${m}` : "";
 }
 
 function highlightActiveNav() {

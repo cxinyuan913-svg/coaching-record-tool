@@ -68,14 +68,15 @@
         <div class="form-row">
           <label for="f-start-date">第一堂日期</label>
           <input id="f-start-date" type="date" required />
+          <span id="weekday-hint" style="font-size: 12px; color: #888"></span>
         </div>
         <div class="form-row">
-          <label for="f-weekday">每週上課日</label>
-          <select id="f-weekday"></select>
-        </div>
-        <div class="form-row">
-          <label for="f-recur-time">上課時段</label>
-          <input id="f-recur-time" type="time" step="1800" required />
+          <label for="f-recur-time-hour">上課時段（24 小時制）</label>
+          <div style="display: flex; gap: 6px; align-items: center">
+            <select id="f-recur-time-hour" required></select>
+            <span>:</span>
+            <select id="f-recur-time-minute" required></select>
+          </div>
         </div>
         <div class="form-row">
           <label for="f-venue">預設場地</label>
