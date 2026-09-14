@@ -206,3 +206,18 @@ class UnpaidSummary(BaseModel):
     unpaid_lessons: list[LessonOut]
     unpaid_packages: list[PackageOut]
     unsettled_adjustments: list[AdjustmentOut]
+
+
+class BookingStatusUpdate(BaseModel):
+    booking_status: BookingStatus
+
+
+class BookingCheckItem(BaseModel):
+    lesson: LessonOut
+    booking_open_at: datetime
+
+
+class BookingCheckSummary(BaseModel):
+    need_booking: list[BookingCheckItem]
+    not_yet_open: list[BookingCheckItem]
+    booked: list[BookingCheckItem]
