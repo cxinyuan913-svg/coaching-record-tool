@@ -13,9 +13,56 @@
     <a href="/price_rules.html">價目表</a>
   </nav>
   <main>
-    <h1>價目表</h1>
-    <p>（建置中）</p>
+    <div class="toolbar">
+      <h1>價目表</h1>
+      <button id="btn-add">新增規則</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>人數</th>
+          <th>等級</th>
+          <th>整堂總額</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="rule-list"></tbody>
+    </table>
   </main>
+
+  <div class="modal-backdrop" id="rule-modal">
+    <div class="modal">
+      <h2 id="modal-title">新增價目規則</h2>
+      <form id="rule-form">
+        <div class="form-row">
+          <label for="f-min">人數下限</label>
+          <input id="f-min" type="number" min="1" value="1" required />
+        </div>
+        <div class="form-row">
+          <label for="f-max">人數上限</label>
+          <input id="f-max" type="number" min="1" value="1" required />
+        </div>
+        <div class="form-row">
+          <label for="f-tier">等級</label>
+          <select id="f-tier">
+            <option value="new">新生</option>
+            <option value="friend">朋友</option>
+            <option value="regular">熟客</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="f-price">整堂總額</label>
+          <input id="f-price" type="number" min="0" step="1" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="btn-cancel">取消</button>
+          <button type="submit">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/static/js/common.js"></script>
+  <script src="/static/js/price_rules.js"></script>
 </body>
 </html>
