@@ -116,6 +116,7 @@ function openCreateModal(dateStr) {
   document.getElementById("package-note").style.display = "none";
   document.getElementById("row-status").style.display = "none";
   document.getElementById("btn-delete").style.display = "none";
+  document.getElementById("adjustments-section").style.display = "none";
   refreshSuggestedPrice();
   document.getElementById("lesson-modal").classList.add("open");
 }
@@ -140,7 +141,84 @@ async function openEditModal(lessonId) {
   document.getElementById("package-note").style.display = isPackage ? "" : "none";
   document.getElementById("row-status").style.display = "";
   document.getElementById("btn-delete").style.display = "";
+
+  const venue = venues.find((v) => v.id === lesson.venue_id);
+  document.getElementById("cancellation-policy-hint").textContent = venue?.cancellation_policy
+    ? `${venue.name} 取消／改期規定：${venue.cancellation_policy}`
+    : "";
+  document.getElementById("adjustments-section").style.display = "";
+  await loadAdjustments();
+
   document.getElementById("lesson-modal").classList.add("open");
+}
+
+async function loadAdjustments() {
+  const ADJ_TYPE_LABEL = { headcount_diff: "人數差額", venue_fee: "場地費", other: "其他" };
+  const adjustments = await api.get(`/api/adjustments?lesson_id=${editingLessonId}`);
+  const tbody = document.getElementById("adjustment-list");
+  tbody.innerHTML = "";
+  if (adjustments.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5">無額外費用</td></tr>';
+    return;
+  }
+  adjustments.forEach((a) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${ADJ_TYPE_LABEL[a.type] || a.type}</td>
+      <td>${a.amount}</td>
+      <td>${a.note ? a.note.replace(/</g, "&lt;") : ""}</td>
+      <td>${a.settled ? "已結清" : "未結清"}</td>
+      <td>
+        ${
+          a.settled
+            ? ""
+            : `<button type="button" class="secondary" data-action="settle-adj" data-id="${a.id}">結清</button>
+               <button type="button" class="danger" data-action="delete-adj" data-id="${a.id}">刪除</button>`
+        }
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function handleAddAdjustment() {
+  const amount = parseFloat(document.getElementById("adj-amount").value);
+  if (Number.isNaN(amount)) {
+    alert("請輸入金額");
+    return;
+  }
+  const payload = {
+    lesson_id: editingLessonId,
+    type: document.getElementById("adj-type").value,
+    amount,
+    note: document.getElementById("adj-note").value.trim() || null,
+  };
+  try {
+    await api.post("/api/adjustments", payload);
+    document.getElementById("adj-amount").value = "";
+    document.getElementById("adj-note").value = "";
+    await loadAdjustments();
+  } catch (err) {
+    alert("新增失敗：" + err.message);
+  }
+}
+
+async function handleAdjustmentListClick(e) {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  try {
+    if (btn.dataset.action === "settle-adj") {
+      await api.patch(`/api/adjustments/${id}/settle`, {});
+    } else if (btn.dataset.action === "delete-adj") {
+      await api.delete(`/api/adjustments/${id}`);
+    } else {
+      return;
+    }
+    await loadAdjustments();
+  } catch (err) {
+    alert("操作失敗：" + err.message);
+  }
 }
 
 function closeModal() {
@@ -222,4 +300,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("lesson-form").addEventListener("submit", handleSave);
   document.getElementById("f-student").addEventListener("change", refreshSuggestedPrice);
   document.getElementById("f-headcount").addEventListener("input", refreshSuggestedPrice);
+  document.getElementById("btn-add-adjustment").addEventListener("click", handleAddAdjustment);
+  document.getElementById("adjustment-list").addEventListener("click", handleAdjustmentListClick);
 });
