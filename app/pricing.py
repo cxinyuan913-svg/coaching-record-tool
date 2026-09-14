@@ -6,8 +6,9 @@ from app import models
 from app.models import Tier
 
 
-def resolve_price(db: Session, tier: Tier, headcount: int) -> float:
-    """依人數與 tier 查價目表；3 人以上查無朋友價時退回熟客價。"""
+def resolve_price(db: Session, tier: Tier, headcount: int, duration_minutes: int = 60) -> float:
+    """依人數與 tier 查價目表（價目表金額為 1 小時價），乘以時長比例得出總金額；
+    3 人以上查無朋友價時退回熟客價。"""
     rule = (
         db.query(models.PriceRule)
         .filter(
@@ -29,4 +30,4 @@ def resolve_price(db: Session, tier: Tier, headcount: int) -> float:
         )
     if rule is None:
         raise HTTPException(status_code=400, detail="找不到對應的價目規則")
-    return rule.price
+    return round(rule.price * (duration_minutes / 60), 2)

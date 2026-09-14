@@ -29,7 +29,8 @@ const api = {
 };
 
 // 時間選單（24 小時制，僅 00/30 分）：填入時／分兩個 select
-// withPlaceholder=true 會加一個未選取的空白選項，用於「新增課程」時強制使用者主動選時間
+// withPlaceholder=true 會給「時」加一個未選取的空白選項，強制使用者主動選時間；
+// 「分」一律預設 00，選了時之後不用再手動選分鐘
 function populateTimeSelects(hourSelectId, minuteSelectId, withPlaceholder) {
   const hourSelect = document.getElementById(hourSelectId);
   const minuteSelect = document.getElementById(minuteSelectId);
@@ -40,10 +41,6 @@ function populateTimeSelects(hourSelectId, minuteSelectId, withPlaceholder) {
     hOpt.value = "";
     hOpt.textContent = "時";
     hourSelect.appendChild(hOpt);
-    const mOpt = document.createElement("option");
-    mOpt.value = "";
-    mOpt.textContent = "分";
-    minuteSelect.appendChild(mOpt);
   }
   for (let h = 0; h < 24; h++) {
     const opt = document.createElement("option");
@@ -57,6 +54,7 @@ function populateTimeSelects(hourSelectId, minuteSelectId, withPlaceholder) {
     opt.textContent = m;
     minuteSelect.appendChild(opt);
   });
+  minuteSelect.value = "00";
 }
 
 function setTimeSelectValue(hourSelectId, minuteSelectId, hhmm) {
