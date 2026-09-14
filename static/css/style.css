@@ -204,3 +204,16 @@ button.danger {
   font-size: 16px;
   margin-bottom: 8px;
 }
+
+/* 訂場檢查：已訂區塊調淡顯示 */
+.dimmed-table {
+  opacity: 0.6;
+}
+
+details summary {
+  cursor: pointer;
+}
+
+details table {
+  margin-top: 8px;
+}
