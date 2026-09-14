@@ -81,6 +81,7 @@ class LessonBase(BaseModel):
     headcount: int = 1
     payment_status: PaymentStatus = PaymentStatus.UNPAID
     revenue_amount: float | None = None
+    venue_fee_amount: float = 0
 
 
 class LessonCreate(LessonBase):
@@ -119,6 +120,7 @@ class LessonOut(BaseModel):
     payment_status: PaymentStatus
     payment_date: date | None
     revenue_amount: float
+    venue_fee_amount: float
 
 
 class LessonLeaveRequest(BaseModel):

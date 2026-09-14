@@ -16,9 +16,11 @@ def list_price_rules(db: Session = Depends(get_db)):
 
 
 @router.get("/resolve")
-def resolve_price_endpoint(tier: Tier, headcount: int, db: Session = Depends(get_db)):
-    """依 tier 與人數查價目表，供表單即時預覽金額使用。"""
-    return {"price": resolve_price(db, tier, headcount)}
+def resolve_price_endpoint(
+    tier: Tier, headcount: int, duration: int = 60, db: Session = Depends(get_db)
+):
+    """依 tier、人數、時長（分鐘）查價目表算出總金額，供表單即時預覽使用。"""
+    return {"price": resolve_price(db, tier, headcount, duration)}
 
 
 @router.post("", response_model=schemas.PriceRuleOut, status_code=201)

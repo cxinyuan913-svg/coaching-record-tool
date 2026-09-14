@@ -105,16 +105,24 @@ function initCalendar() {
 async function refreshSuggestedPrice() {
   const studentId = parseInt(document.getElementById("f-student").value, 10);
   const headcount = parseInt(document.getElementById("f-headcount").value, 10) || 1;
+  const duration = parseInt(document.getElementById("f-duration").value, 10) || 60;
   const student = students.find((s) => s.id === studentId);
   if (!student) return;
   try {
     const result = await api.get(
-      `/api/price_rules/resolve?tier=${student.tier}&headcount=${headcount}`
+      `/api/price_rules/resolve?tier=${student.tier}&headcount=${headcount}&duration=${duration}`
     );
     document.getElementById("f-amount").value = result.price;
+    updateTotalAmountDisplay();
   } catch (err) {
     // 查無對應價目規則時，保留原金額讓使用者手動輸入
   }
+}
+
+function updateTotalAmountDisplay() {
+  const coachFee = parseFloat(document.getElementById("f-amount").value) || 0;
+  const venueFee = parseFloat(document.getElementById("f-venue-fee").value) || 0;
+  document.getElementById("total-amount-display").textContent = coachFee + venueFee;
 }
 
 function openCreateModal(dateStr) {
@@ -129,17 +137,19 @@ function openCreateModal(dateStr) {
   document.getElementById("f-venue").selectedIndex = 0;
   document.getElementById("f-date").value = dateStr || "";
   document.getElementById("f-time-hour").value = "";
-  document.getElementById("f-time-minute").value = "";
+  document.getElementById("f-time-minute").value = "00";
   document.getElementById("f-duration").value = 60;
   document.getElementById("f-headcount").value = 1;
   document.getElementById("f-payment").value = "unpaid";
   document.getElementById("f-amount").disabled = false;
   document.getElementById("f-payment").disabled = false;
+  document.getElementById("f-venue-fee").value = 0;
   document.getElementById("package-note").style.display = "none";
   document.getElementById("row-status").style.display = "none";
   document.getElementById("btn-delete").style.display = "none";
   document.getElementById("adjustments-section").style.display = "none";
   refreshSuggestedPrice();
+  updateTotalAmountDisplay();
   document.getElementById("lesson-modal").classList.add("open");
 }
 
@@ -156,6 +166,7 @@ async function openEditModal(lessonId) {
   document.getElementById("f-duration").value = lesson.duration;
   document.getElementById("f-headcount").value = lesson.headcount;
   document.getElementById("f-amount").value = lesson.revenue_amount;
+  document.getElementById("f-venue-fee").value = lesson.venue_fee_amount;
   document.getElementById("f-payment").value = lesson.payment_status;
   document.getElementById("f-status").value = lesson.status;
   document.getElementById("f-amount").disabled = isPackage;
@@ -163,6 +174,7 @@ async function openEditModal(lessonId) {
   document.getElementById("package-note").style.display = isPackage ? "" : "none";
   document.getElementById("row-status").style.display = "";
   document.getElementById("btn-delete").style.display = "";
+  updateTotalAmountDisplay();
 
   const venue = venues.find((v) => v.id === lesson.venue_id);
   document.getElementById("cancellation-policy-hint").textContent = venue?.cancellation_policy
@@ -287,6 +299,7 @@ async function handleSave(e) {
     headcount: parseInt(document.getElementById("f-headcount").value, 10),
     payment_status: document.getElementById("f-payment").value,
     revenue_amount: parseFloat(document.getElementById("f-amount").value),
+    venue_fee_amount: parseFloat(document.getElementById("f-venue-fee").value) || 0,
   };
   try {
     if (editingLessonId) {
@@ -322,6 +335,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("lesson-form").addEventListener("submit", handleSave);
   document.getElementById("f-student").addEventListener("change", refreshSuggestedPrice);
   document.getElementById("f-headcount").addEventListener("input", refreshSuggestedPrice);
+  document.getElementById("f-duration").addEventListener("change", refreshSuggestedPrice);
+  document.getElementById("f-amount").addEventListener("input", updateTotalAmountDisplay);
+  document.getElementById("f-venue-fee").addEventListener("input", updateTotalAmountDisplay);
   document.getElementById("btn-add-adjustment").addEventListener("click", handleAddAdjustment);
   document.getElementById("adjustment-list").addEventListener("click", handleAdjustmentListClick);
   document.getElementById("btn-add-lesson").addEventListener("click", () => {

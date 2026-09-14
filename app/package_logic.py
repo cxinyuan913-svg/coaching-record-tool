@@ -154,7 +154,9 @@ def sync_headcount_diff_adjustment(
             db.delete(existing)
         return
 
-    diff = resolve_price(db, student.tier, lesson.headcount) - resolve_price(db, student.tier, 1)
+    diff = resolve_price(db, student.tier, lesson.headcount, lesson.duration) - resolve_price(
+        db, student.tier, 1, lesson.duration
+    )
     if existing is not None:
         existing.amount = diff
     else:

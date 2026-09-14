@@ -153,6 +153,8 @@ class Lesson(Base):
     )
     payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     revenue_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    # 場地費：代收代付給場館的費用，不算教練收入，不計入收入統計
+    venue_fee_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
 
     student: Mapped["Student"] = relationship(back_populates="lessons")
     venue: Mapped["Venue"] = relationship(back_populates="lessons")

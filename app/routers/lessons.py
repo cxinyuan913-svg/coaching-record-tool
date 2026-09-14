@@ -41,6 +41,7 @@ def _to_out(lesson: models.Lesson) -> schemas.LessonOut:
         payment_status=lesson.payment_status,
         payment_date=lesson.payment_date,
         revenue_amount=lesson.revenue_amount,
+        venue_fee_amount=lesson.venue_fee_amount,
     )
 
 
@@ -71,7 +72,7 @@ def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
 
     revenue_amount = lesson.revenue_amount
     if revenue_amount is None:
-        revenue_amount = resolve_price(db, student.tier, lesson.headcount)
+        revenue_amount = resolve_price(db, student.tier, lesson.headcount, lesson.duration)
 
     db_lesson = models.Lesson(
         student_id=lesson.student_id,
@@ -84,6 +85,7 @@ def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
         payment_status=lesson.payment_status,
         payment_date=date_type.today() if lesson.payment_status == PaymentStatus.PAID else None,
         revenue_amount=revenue_amount,
+        venue_fee_amount=lesson.venue_fee_amount,
     )
     db.add(db_lesson)
     db.commit()
@@ -128,6 +130,7 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     db_lesson.duration = lesson.duration
     db_lesson.headcount = lesson.headcount
     db_lesson.status = lesson.status
+    db_lesson.venue_fee_amount = lesson.venue_fee_amount  # 場地費為代收代付，不受套組金額控管
 
     if is_package_lesson:
         if was_leave and lesson.status != LessonStatus.LEAVE:

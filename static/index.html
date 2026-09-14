@@ -59,12 +59,19 @@
           <input id="f-headcount" type="number" min="1" value="1" required />
         </div>
         <p id="package-note" style="display: none; font-size: 13px; color: #888">
-          此堂屬於課程套組，金額與收款狀態由該套組統一控管；狀態改為「請假」會自動順延一堂。
+          此堂屬於課程套組，教練費與收款狀態由該套組統一控管；場地費不受影響，可個別填寫。狀態改為「請假」會自動順延一堂。
         </p>
         <div class="form-row">
-          <label for="f-amount">金額（自動依價目表帶入，可覆寫）</label>
+          <label for="f-amount">教練費（收入，自動依價目表帶入，可覆寫）</label>
           <input id="f-amount" type="number" min="0" step="1" required />
         </div>
+        <div class="form-row">
+          <label for="f-venue-fee">場地費（代收代付，不算收入）</label>
+          <input id="f-venue-fee" type="number" min="0" step="1" value="0" required />
+        </div>
+        <p class="form-row" style="font-size: 13px; color: #555; margin-top: -6px">
+          跟學生收的總金額：<span id="total-amount-display">0</span>
+        </p>
         <div class="form-row">
           <label for="f-payment">收款狀態</label>
           <select id="f-payment">
