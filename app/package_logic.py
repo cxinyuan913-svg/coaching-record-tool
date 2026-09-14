@@ -5,7 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app import models
-from app.models import LessonStatus, PackageStatus
+from app.models import AdjustmentType, LessonStatus, PackageStatus
+from app.pricing import resolve_price
 
 
 def generate_package_lessons(db: Session, package: models.Package) -> None:
@@ -108,3 +109,37 @@ def mark_leave_and_reschedule(
     db.add(makeup_lesson)
     recompute_remaining_sessions(db, package)
     return makeup_lesson
+
+
+def sync_headcount_diff_adjustment(
+    db: Session, lesson: models.Lesson, student: models.Student
+) -> None:
+    """包制以單人價預收，人數改為 N 人時自動算出差額（見 SPEC.md 人數差額）。"""
+    existing = (
+        db.query(models.Adjustment)
+        .filter(
+            models.Adjustment.lesson_id == lesson.id,
+            models.Adjustment.type == AdjustmentType.HEADCOUNT_DIFF,
+            models.Adjustment.settled.is_(False),
+        )
+        .first()
+    )
+    if lesson.headcount <= 1:
+        if existing is not None:
+            db.delete(existing)
+        return
+
+    diff = resolve_price(db, student.tier, lesson.headcount) - resolve_price(db, student.tier, 1)
+    if existing is not None:
+        existing.amount = diff
+    else:
+        db.add(
+            models.Adjustment(
+                lesson_id=lesson.id,
+                package_id=lesson.package_id,
+                type=AdjustmentType.HEADCOUNT_DIFF,
+                amount=diff,
+                note="人數差額（自動計算）",
+                settled=False,
+            )
+        )

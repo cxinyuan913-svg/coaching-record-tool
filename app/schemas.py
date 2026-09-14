@@ -221,3 +221,8 @@ class BookingCheckSummary(BaseModel):
     need_booking: list[BookingCheckItem]
     not_yet_open: list[BookingCheckItem]
     booked: list[BookingCheckItem]
+
+
+class PackageSettlement(BaseModel):
+    adjustments: list[AdjustmentOut]
+    total: float

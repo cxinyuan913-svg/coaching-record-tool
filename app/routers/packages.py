@@ -133,6 +133,48 @@ def update_package_payment(
     return _to_out(package)
 
 
+@router.get("/{package_id}/settlement", response_model=schemas.PackageSettlement)
+def get_package_settlement(package_id: int, db: Session = Depends(get_db)):
+    """彙整該包目前未結清的差額（人數差額／場地費等），供期末結算參考。"""
+    package = db.get(models.Package, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="包不存在")
+    adjustments = (
+        db.query(models.Adjustment)
+        .filter(models.Adjustment.package_id == package_id, models.Adjustment.settled.is_(False))
+        .order_by(models.Adjustment.id)
+        .all()
+    )
+    total = sum(a.amount for a in adjustments)
+    return schemas.PackageSettlement(
+        adjustments=[schemas.AdjustmentOut.model_validate(a) for a in adjustments], total=total
+    )
+
+
+@router.patch("/{package_id}/settlement/settle", response_model=schemas.PackageSettlement)
+def settle_package(package_id: int, db: Session = Depends(get_db)):
+    """將該包所有未結清差額整批標記為已結清。"""
+    from datetime import datetime
+
+    package = db.get(models.Package, package_id)
+    if package is None:
+        raise HTTPException(status_code=404, detail="包不存在")
+    adjustments = (
+        db.query(models.Adjustment)
+        .filter(models.Adjustment.package_id == package_id, models.Adjustment.settled.is_(False))
+        .all()
+    )
+    now = datetime.now()
+    for a in adjustments:
+        a.settled = True
+        a.settled_at = now
+    db.commit()
+    return schemas.PackageSettlement(
+        adjustments=[schemas.AdjustmentOut.model_validate(a) for a in adjustments],
+        total=sum(a.amount for a in adjustments),
+    )
+
+
 @router.delete("/{package_id}", status_code=204)
 def delete_package(package_id: int, db: Session = Depends(get_db)):
     package = db.get(models.Package, package_id)
