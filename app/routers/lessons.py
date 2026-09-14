@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PaymentStatus
-from app.package_logic import mark_leave_and_reschedule, recompute_remaining_sessions
+from app.package_logic import (
+    mark_leave_and_reschedule,
+    recompute_remaining_sessions,
+    sync_headcount_diff_adjustment,
+)
 from app.pricing import resolve_price
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
@@ -129,6 +133,7 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
         db_lesson.payment_status = package.payment_status
         db_lesson.payment_date = package.payment_date
         recompute_remaining_sessions(db, package)
+        sync_headcount_diff_adjustment(db, db_lesson, student)
     else:
         if db_lesson.payment_status != lesson.payment_status:
             db_lesson.payment_date = (

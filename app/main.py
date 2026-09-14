@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import models  # noqa: F401  匯入以註冊 ORM models 到 Base.metadata
 from app.database import Base, SessionLocal, engine
-from app.routers import booking, lessons, packages, price_rules, stats, students, venues
+from app.routers import adjustments, booking, lessons, packages, price_rules, stats, students, venues
 from app.seed import seed_price_rules
 
 # 六張表一次建齊
@@ -22,6 +22,7 @@ app.include_router(lessons.router)
 app.include_router(packages.router)
 app.include_router(stats.router)
 app.include_router(booking.router)
+app.include_router(adjustments.router)
 
 
 @app.get("/api/health")
