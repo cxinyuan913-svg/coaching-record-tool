@@ -11,7 +11,10 @@ from app.models import BookingStatus, LessonStatus
 router = APIRouter(prefix="/api/booking", tags=["booking"])
 
 
-def _booking_open_at(lesson: models.Lesson, venue: models.Venue) -> datetime:
+def _booking_open_at(lesson: models.Lesson, venue: models.Venue) -> datetime | None:
+    """回傳開放訂場時刻；場地無 booking_open_days_before/time 設定時代表隨時可訂，回傳 None。"""
+    if venue.booking_open_days_before is None or venue.booking_open_time is None:
+        return None
     open_date = lesson.date - timedelta(days=venue.booking_open_days_before)
     return datetime.combine(open_date, venue.booking_open_time)
 
@@ -37,7 +40,7 @@ def booking_check(db: Session = Depends(get_db)):
         item = schemas.BookingCheckItem(lesson=lesson_to_out(lesson), booking_open_at=open_at)
         if lesson.booking_status == BookingStatus.BOOKED:
             booked.append(item)
-        elif now >= open_at:
+        elif open_at is None or now >= open_at:
             need_booking.append(item)
         else:
             not_yet_open.append(item)

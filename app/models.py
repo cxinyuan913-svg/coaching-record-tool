@@ -76,8 +76,9 @@ class Venue(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     address: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    booking_open_days_before: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    booking_open_time: Mapped[time] = mapped_column(Time, nullable=False, default=time(0, 0))
+    # 兩者皆為 NULL 代表「隨時可訂」，訂場檢查時永遠視為已開放
+    booking_open_days_before: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    booking_open_time: Mapped[time | None] = mapped_column(Time, nullable=True, default=time(0, 0))
     cancellation_policy: Mapped[str | None] = mapped_column(Text, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
