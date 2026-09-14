@@ -13,9 +13,61 @@
     <a href="/price_rules.html">價目表</a>
   </nav>
   <main>
-    <h1>場地管理</h1>
-    <p>（建置中）</p>
+    <div class="toolbar">
+      <h1>場地管理</h1>
+      <button id="btn-add">新增場地</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>名稱</th>
+          <th>地址</th>
+          <th>開放訂場規則</th>
+          <th>取消／改期規定</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="venue-list"></tbody>
+    </table>
   </main>
+
+  <div class="modal-backdrop" id="venue-modal">
+    <div class="modal">
+      <h2 id="modal-title">新增場地</h2>
+      <form id="venue-form">
+        <div class="form-row">
+          <label for="f-name">名稱</label>
+          <input id="f-name" type="text" required />
+        </div>
+        <div class="form-row">
+          <label for="f-address">地址</label>
+          <input id="f-address" type="text" />
+        </div>
+        <div class="form-row">
+          <label for="f-days">提前幾天開放預訂</label>
+          <input id="f-days" type="number" min="0" value="0" />
+        </div>
+        <div class="form-row">
+          <label for="f-time">開放時刻</label>
+          <input id="f-time" type="time" value="00:00" />
+        </div>
+        <div class="form-row">
+          <label for="f-policy">取消／改期規定</label>
+          <textarea id="f-policy" rows="2"></textarea>
+        </div>
+        <div class="form-row">
+          <label for="f-note">備註</label>
+          <textarea id="f-note" rows="2"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="btn-cancel">取消</button>
+          <button type="submit">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/static/js/common.js"></script>
+  <script src="/static/js/venues.js"></script>
 </body>
 </html>
