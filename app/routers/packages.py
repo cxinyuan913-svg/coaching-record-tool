@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.database import get_db
 from app.models import PackageStatus, PaymentStatus
-from app.package_logic import generate_package_lessons
+from app.package_logic import (
+    generate_package_lessons,
+    recompute_package_pricing,
+    recompute_remaining_sessions,
+)
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
@@ -81,6 +85,8 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     db.add(db_package)
     db.flush()  # 取得 db_package.id 供 lessons 使用
     generate_package_lessons(db, db_package)
+    db.flush()
+    recompute_package_pricing(db, db_package)
     db.commit()
     db.refresh(db_package)
     return _to_out(db_package)
@@ -106,20 +112,22 @@ def update_package(package_id: int, payload: schemas.PackageUpdate, db: Session 
     if not 0 <= payload.recur_weekday <= 6:
         raise HTTPException(status_code=400, detail="recur_weekday 必須介於 0-6")
 
+    if payload.total_sessions < 1:
+        raise HTTPException(status_code=400, detail="total_sessions 必須至少為 1")
+
     package.name = payload.name
     package.session_duration = payload.session_duration
+    package.total_sessions = payload.total_sessions
     package.total_price = payload.total_price
     package.purchased_date = payload.purchased_date
     package.start_date = payload.start_date
     package.recur_weekday = payload.recur_weekday
     package.recur_start_time = payload.recur_start_time
     package.default_venue_id = payload.default_venue_id
-    package.price_per_session = round(payload.total_price / package.total_sessions, 2)
 
-    # 套組單堂攤提金額調整後，底下所有堂的 revenue_amount 一併同步
-    db.query(models.Lesson).filter(models.Lesson.package_id == package_id).update(
-        {"revenue_amount": package.price_per_session}
-    )
+    # 總堂數或金額變動都會影響剩餘堂數與每堂攤提金額，一併重算
+    recompute_remaining_sessions(db, package)
+    recompute_package_pricing(db, package)
     db.commit()
     db.refresh(package)
     return _to_out(package)

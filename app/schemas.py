@@ -150,10 +150,11 @@ class PackageCreate(PackageBase):
 
 
 class PackageUpdate(BaseModel):
-    """套組設定完後可編輯的欄位；不含 student_id/total_sessions/payment_status（付款狀態走專屬端點）。"""
+    """套組設定完後可編輯的欄位；不含 student_id/payment_status（付款狀態走專屬端點）。"""
 
     name: str
     session_duration: int
+    total_sessions: int
     total_price: float
     purchased_date: date
     start_date: date

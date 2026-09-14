@@ -48,6 +48,29 @@ def recompute_remaining_sessions(db: Session, package: models.Package) -> None:
         package.status = PackageStatus.ACTIVE
 
 
+def recompute_package_pricing(db: Session, package: models.Package) -> None:
+    """依各堂實際時長比例重新分配套組總價（見對話紀錄：時長不同時金額按比例分攤）。
+
+    以套組標準時長（session_duration）為 1 個單位，例如某堂時長是標準的 2 倍就算 2 個單位；
+    所有非請假堂的單位數加總，總價除以單位總數得出「單位價」，每堂金額 = 單位價 × 自己的單位數。
+    每次呼叫都會對套組內所有非請假堂重新分配（不保留舊金額），異動會反映到既有收入統計。
+    """
+    if not package.session_duration:
+        return
+    lessons = (
+        db.query(models.Lesson)
+        .filter(models.Lesson.package_id == package.id, models.Lesson.status != LessonStatus.LEAVE)
+        .all()
+    )
+    total_units = sum(lesson.duration / package.session_duration for lesson in lessons)
+    if total_units <= 0:
+        return
+    unit_price = package.total_price / total_units
+    package.price_per_session = round(unit_price, 2)
+    for lesson in lessons:
+        lesson.revenue_amount = round(unit_price * (lesson.duration / package.session_duration), 2)
+
+
 def mark_leave_and_reschedule(
     db: Session,
     lesson: models.Lesson,
@@ -107,7 +130,9 @@ def mark_leave_and_reschedule(
         revenue_amount=package.price_per_session,
     )
     db.add(makeup_lesson)
+    db.flush()  # 確保 recompute 能查到剛新增的 makeup_lesson
     recompute_remaining_sessions(db, package)
+    recompute_package_pricing(db, package)
     return makeup_lesson
 
 
