@@ -43,8 +43,12 @@
           <input id="f-date" type="date" required />
         </div>
         <div class="form-row">
-          <label for="f-time">時間</label>
-          <input id="f-time" type="time" step="1800" required />
+          <label for="f-time-hour">時間（24 小時制）</label>
+          <div style="display: flex; gap: 6px; align-items: center">
+            <select id="f-time-hour" required></select>
+            <span>:</span>
+            <select id="f-time-minute" required></select>
+          </div>
         </div>
         <div class="form-row">
           <label for="f-duration">時長（分鐘）</label>
