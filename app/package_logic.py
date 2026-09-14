@@ -77,11 +77,7 @@ def mark_leave_and_reschedule(
     makeup_date=None,
     makeup_start_time=None,
 ) -> models.Lesson:
-    """標記請假，該堂之後的所有堂全部順延一週，最後補一堂（見對話紀錄：整批順延）。
-
-    例：週3的堂請假，原本週4~週8依序往後移一週（週4→週5的位置、週5→週6...），
-    最後在新的最晚日期之後再補一堂，維持套組總堂數不變。
-    """
+    """標記請假並在套組目前最後一堂的下一週補一堂（見 SPEC.md 請假順延）。"""
     package = db.get(models.Package, lesson.package_id)
     if package is None:
         raise HTTPException(status_code=400, detail="此堂非套組課程，無需順延")
@@ -90,23 +86,13 @@ def mark_leave_and_reschedule(
     lesson.revenue_amount = 0
     lesson.status = LessonStatus.LEAVE
 
-    # 該堂之後（含已由前次請假順延產生的堂）全部往後推一週
-    later_lessons = (
-        db.query(models.Lesson)
-        .filter(
-            models.Lesson.package_id == package.id,
-            models.Lesson.date > lesson.date,
-            models.Lesson.status.notin_([LessonStatus.LEAVE, LessonStatus.CANCELLED]),
-        )
-        .order_by(models.Lesson.date.desc())
-        .all()
-    )
-    last_date = lesson.date
-    for later in later_lessons:
-        later.date = later.date + timedelta(weeks=1)
-        last_date = max(last_date, later.date)
-
     if makeup_date is None:
+        last_date = (
+            db.query(models.Lesson.date)
+            .filter(models.Lesson.package_id == package.id)
+            .order_by(models.Lesson.date.desc())
+            .first()
+        )[0]
         makeup_date = last_date + timedelta(weeks=1)
     if makeup_start_time is None:
         makeup_start_time = package.recur_start_time
