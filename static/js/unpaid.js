@@ -1,6 +1,11 @@
 // 未收款清單頁邏輯
 
-const ADJ_TYPE_LABEL = { headcount_diff: "人數差額", venue_fee: "場地費", other: "其他" };
+const ADJ_TYPE_LABEL = {
+  headcount_diff: "人數差額",
+  venue_fee: "場地費",
+  venue_change: "臨時改場地",
+  other: "其他",
+};
 
 function escapeHtml(str) {
   const div = document.createElement("div");
