@@ -4,6 +4,95 @@
   <meta charset="UTF-8" />
   <title>收入統計 - 羽球教練紀錄工具</title>
   <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    .viz-root {
+      color-scheme: light;
+      --surface-1: #fcfcfb;
+      --text-primary: #0b0b0b;
+      --text-secondary: #52514e;
+      --text-muted: #898781;
+      --gridline: #e1e0d9;
+      --series-1: #2a78d6;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) .viz-root {
+        color-scheme: dark;
+        --surface-1: #1a1a19;
+        --text-primary: #ffffff;
+        --text-secondary: #c3c2b7;
+        --text-muted: #898781;
+        --gridline: #2c2c2a;
+        --series-1: #3987e5;
+      }
+    }
+    :root[data-theme="dark"] .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --gridline: #2c2c2a;
+      --series-1: #3987e5;
+    }
+    .chart-section {
+      background: var(--surface-1, #fff);
+      border-radius: 8px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .chart-header h2 {
+      font-size: 15px;
+      margin: 0;
+      color: var(--text-primary, #0b0b0b);
+    }
+    .chart-bar-label {
+      fill: var(--text-secondary, #52514e);
+      font-size: 12px;
+    }
+    .chart-value-label {
+      fill: var(--text-primary, #0b0b0b);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chart-gridline {
+      stroke: var(--gridline, #e1e0d9);
+      stroke-width: 1;
+    }
+    .chart-bar {
+      fill: var(--series-1, #2a78d6);
+    }
+    .chart-bar-hit {
+      fill: transparent;
+      cursor: pointer;
+    }
+    .chart-empty {
+      color: var(--text-muted, #898781);
+      font-size: 13px;
+    }
+    .chart-tooltip {
+      position: fixed;
+      background: var(--text-primary, #0b0b0b);
+      color: var(--surface-1, #fff);
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      pointer-events: none;
+      display: none;
+      z-index: 50;
+      white-space: nowrap;
+    }
+    .chart-table {
+      width: 100%;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
   <nav class="topnav">
@@ -36,7 +125,37 @@
         <div class="stat-value" id="stat-total">—</div>
       </div>
     </div>
+
+    <div class="chart-section viz-root">
+      <div class="chart-header">
+        <h2>每位學生總學費（已收款）</h2>
+        <button class="secondary chart-toggle" data-target="student-table">表格檢視</button>
+      </div>
+      <div id="student-chart"></div>
+      <table id="student-table" class="chart-table" style="display: none">
+        <thead>
+          <tr><th>學生</th><th>總學費</th></tr>
+        </thead>
+        <tbody id="student-table-body"></tbody>
+      </table>
+    </div>
+
+    <div class="chart-section viz-root">
+      <div class="chart-header">
+        <h2>每月學費（已收款）</h2>
+        <button class="secondary chart-toggle" data-target="month-table">表格檢視</button>
+      </div>
+      <div id="month-chart"></div>
+      <table id="month-table" class="chart-table" style="display: none">
+        <thead>
+          <tr><th>月份</th><th>學費</th></tr>
+        </thead>
+        <tbody id="month-table-body"></tbody>
+      </table>
+    </div>
   </main>
+
+  <div class="chart-tooltip" id="chart-tooltip"></div>
 
   <script src="/static/js/common.js"></script>
   <script src="/static/js/dashboard.js"></script>
