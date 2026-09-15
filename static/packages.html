@@ -59,9 +59,17 @@
           <input id="f-total-sessions" type="number" min="1" step="1" value="8" required />
         </div>
         <div class="form-row">
-          <label for="f-total-price">總金額</label>
-          <input id="f-total-price" type="number" min="0" step="1" required />
+          <label for="f-coach-fee">堂課費（每小時，收入）</label>
+          <input id="f-coach-fee" type="number" min="0" step="1" required />
         </div>
+        <div class="form-row">
+          <label for="f-venue-fee">場地費（每小時，代收代付）</label>
+          <input id="f-venue-fee" type="number" min="0" step="1" value="0" required />
+        </div>
+        <p style="font-size: 13px; color: #555; margin: 0 0 12px">
+          預估總金額（<span id="total-sessions-display">8</span> 堂 × <span id="per-session-display">0</span>）：
+          <strong id="total-price-display">0</strong>
+        </p>
         <div class="form-row">
           <label for="f-purchased-date">購買日期</label>
           <input id="f-purchased-date" type="date" required />
@@ -91,7 +99,8 @@
           </select>
         </div>
         <p id="edit-note" style="display: none; font-size: 13px; color: #888">
-          編輯不會自動增減課程堂數；已排好的課程請到行事曆個別改期或刪除。總堂數只影響剩餘堂數與金額分攤的計算基準。收款狀態請用列表上的按鈕切換。
+          編輯不會自動增減課程堂數；已排好的課程請到行事曆個別改期或刪除。改費率會重新計算底下所有堂（依各堂自己的時長）的金額，
+          某堂時長不同只影響那一堂，不影響其他堂。收款狀態請用列表上的按鈕切換。
         </p>
         <div class="modal-actions">
           <button type="button" class="secondary" id="btn-cancel">取消</button>

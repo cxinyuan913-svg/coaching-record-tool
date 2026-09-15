@@ -11,6 +11,7 @@ from app.pricing import resolve_price
 
 def generate_package_lessons(db: Session, package: models.Package) -> None:
     """依套組的起始日、週幾、時段，一次產生 total_sessions 筆 lessons。"""
+    hours = package.session_duration / 60
     for i in range(package.total_sessions):
         lesson = models.Lesson(
             student_id=package.student_id,
@@ -25,7 +26,8 @@ def generate_package_lessons(db: Session, package: models.Package) -> None:
             deduct_session=True,
             payment_status=package.payment_status,
             payment_date=package.payment_date,
-            revenue_amount=package.price_per_session,
+            revenue_amount=round(package.coach_fee_per_hour * hours, 2),
+            venue_fee_amount=round(package.venue_fee_per_hour * hours, 2),
         )
         db.add(lesson)
 
@@ -49,26 +51,29 @@ def recompute_remaining_sessions(db: Session, package: models.Package) -> None:
 
 
 def recompute_package_pricing(db: Session, package: models.Package) -> None:
-    """依各堂實際時長比例重新分配套組總價（見對話紀錄：時長不同時金額按比例分攤）。
+    """依「堂課費／場地費（每小時）」費率與各堂實際時長，重新算出每堂金額與套組總價。
 
-    以套組標準時長（session_duration）為 1 個單位，例如某堂時長是標準的 2 倍就算 2 個單位；
-    所有非請假堂的單位數加總，總價除以單位總數得出「單位價」，每堂金額 = 單位價 × 自己的單位數。
-    每次呼叫都會對套組內所有非請假堂重新分配（不保留舊金額），異動會反映到既有收入統計。
+    每堂互不影響：堂課費 = coach_fee_per_hour × 時長(小時)，場地費 = venue_fee_per_hour × 時長(小時)。
+    某堂時長變長只會讓那一堂變貴，不會動到其他堂。price_per_session／total_price 為依標準時長／
+    目前所有非請假堂加總算出的參考值，供畫面顯示「這堂大概多少錢」「總共要收多少」用。
     """
-    if not package.session_duration:
-        return
     lessons = (
         db.query(models.Lesson)
         .filter(models.Lesson.package_id == package.id, models.Lesson.status != LessonStatus.LEAVE)
         .all()
     )
-    total_units = sum(lesson.duration / package.session_duration for lesson in lessons)
-    if total_units <= 0:
-        return
-    unit_price = package.total_price / total_units
-    package.price_per_session = round(unit_price, 2)
     for lesson in lessons:
-        lesson.revenue_amount = round(unit_price * (lesson.duration / package.session_duration), 2)
+        hours = lesson.duration / 60
+        lesson.revenue_amount = round(package.coach_fee_per_hour * hours, 2)
+        lesson.venue_fee_amount = round(package.venue_fee_per_hour * hours, 2)
+
+    standard_hours = package.session_duration / 60 if package.session_duration else 0
+    package.price_per_session = round(
+        (package.coach_fee_per_hour + package.venue_fee_per_hour) * standard_hours, 2
+    )
+    package.total_price = round(
+        sum(lesson.revenue_amount + lesson.venue_fee_amount for lesson in lessons), 2
+    )
 
 
 def mark_leave_and_reschedule(

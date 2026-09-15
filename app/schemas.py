@@ -138,7 +138,8 @@ class PackageBase(BaseModel):
     name: str
     session_duration: int
     total_sessions: int = 8
-    total_price: float
+    coach_fee_per_hour: float
+    venue_fee_per_hour: float = 0
     purchased_date: date
     start_date: date
     recur_weekday: int
@@ -157,7 +158,8 @@ class PackageUpdate(BaseModel):
     name: str
     session_duration: int
     total_sessions: int
-    total_price: float
+    coach_fee_per_hour: float
+    venue_fee_per_hour: float = 0
     purchased_date: date
     start_date: date
     recur_weekday: int
@@ -179,6 +181,8 @@ class PackageOut(BaseModel):
     session_duration: int
     total_sessions: int
     remaining_sessions: int
+    coach_fee_per_hour: float
+    venue_fee_per_hour: float
     total_price: float
     price_per_session: float
     purchased_date: date

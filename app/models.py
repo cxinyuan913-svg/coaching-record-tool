@@ -105,6 +105,9 @@ class Package(Base):
     session_duration: Mapped[int] = mapped_column(Integer, nullable=False)
     total_sessions: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     remaining_sessions: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 堂課費／場地費皆為「每小時」費率；total_price、price_per_session 為依費率與時長算出的結果，非使用者直接輸入
+    coach_fee_per_hour: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    venue_fee_per_hour: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     total_price: Mapped[float] = mapped_column(Float, nullable=False)
     price_per_session: Mapped[float] = mapped_column(Float, nullable=False)
     purchased_date: Mapped[date] = mapped_column(Date, nullable=False)
