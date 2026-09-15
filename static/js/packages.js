@@ -429,7 +429,7 @@ function buildLineMessage(pkg, lessons) {
   lines.push(`羽球課程${totalHours}小時（場地費以${Math.round(pkg.venue_fee_per_hour)}元記）`);
   lines.push("");
   const active = lessons
-    .filter((l) => l.status !== "leave")
+    .filter((l) => l.status !== "leave" && l.status !== "cancelled")
     .slice()
     .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
   active.forEach((lesson, idx) => {

@@ -51,13 +51,18 @@ def remaining_sessions(package: models.Package) -> int:
     return max(package.total_sessions - used, 0)
 
 
+def live_status(package: models.Package) -> PackageStatus:
+    """即時計算的套組狀態：只要還有剩餘堂數就是進行中，用完就是已完成；
+    不用等下次有人編輯資料才會更新（EXPIRED 目前無自動判斷規則，維持原本手動狀態）。"""
+    if package.status == PackageStatus.EXPIRED:
+        return package.status
+    return PackageStatus.COMPLETED if remaining_sessions(package) == 0 else PackageStatus.ACTIVE
+
+
 def recompute_remaining_sessions(db: Session, package: models.Package) -> None:
-    """把即時算出的剩餘堂數寫回欄位，並依此連動套組進行中／已完成狀態。"""
+    """把即時算出的剩餘堂數與狀態寫回欄位（供仰賴 DB 欄位值的地方使用）。"""
     package.remaining_sessions = remaining_sessions(package)
-    if package.remaining_sessions == 0 and package.status == PackageStatus.ACTIVE:
-        package.status = PackageStatus.COMPLETED
-    elif package.remaining_sessions > 0 and package.status == PackageStatus.COMPLETED:
-        package.status = PackageStatus.ACTIVE
+    package.status = live_status(package)
 
 
 def recompute_package_pricing(db: Session, package: models.Package) -> None:
