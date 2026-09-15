@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import get_db
-from app.models import PackageStatus, PaymentStatus
+from app.models import LessonStatus, PackageStatus, PaymentStatus
 from app.package_logic import (
     generate_package_lessons,
     recompute_package_pricing,
@@ -119,6 +119,8 @@ def update_package(package_id: int, payload: schemas.PackageUpdate, db: Session 
     if payload.total_sessions < 1:
         raise HTTPException(status_code=400, detail="total_sessions 必須至少為 1")
 
+    duration_changed = payload.session_duration != package.session_duration
+
     package.name = payload.name
     package.session_duration = payload.session_duration
     package.total_sessions = payload.total_sessions
@@ -129,6 +131,12 @@ def update_package(package_id: int, payload: schemas.PackageUpdate, db: Session 
     package.recur_weekday = payload.recur_weekday
     package.recur_start_time = payload.recur_start_time
     package.default_venue_id = payload.default_venue_id
+
+    if duration_changed:
+        # 套組標準時長改變時，既有（非請假）堂的時長一併同步為新標準，金額才會照新時長算
+        db.query(models.Lesson).filter(
+            models.Lesson.package_id == package_id, models.Lesson.status != LessonStatus.LEAVE
+        ).update({"duration": payload.session_duration})
 
     # 總堂數或金額變動都會影響剩餘堂數與每堂攤提金額，一併重算
     recompute_remaining_sessions(db, package)
