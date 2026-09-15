@@ -47,6 +47,22 @@ def create_adjustment(payload: schemas.AdjustmentCreate, db: Session = Depends(g
     return db_adjustment
 
 
+@router.put("/{adjustment_id}", response_model=schemas.AdjustmentOut)
+def update_adjustment(
+    adjustment_id: int, payload: schemas.AdjustmentUpdate, db: Session = Depends(get_db)
+):
+    """編輯差額的類型／金額／備註，不用回到原本那堂課才能改。"""
+    adjustment = db.get(models.Adjustment, adjustment_id)
+    if adjustment is None:
+        raise HTTPException(status_code=404, detail="差額紀錄不存在")
+    adjustment.type = payload.type
+    adjustment.amount = payload.amount
+    adjustment.note = payload.note
+    db.commit()
+    db.refresh(adjustment)
+    return adjustment
+
+
 @router.patch("/{adjustment_id}/settle", response_model=schemas.AdjustmentOut)
 def settle_adjustment(adjustment_id: int, db: Session = Depends(get_db)):
     adjustment = db.get(models.Adjustment, adjustment_id)
