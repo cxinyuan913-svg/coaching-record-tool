@@ -109,6 +109,7 @@ function initCalendar() {
     initialView: mobileQuery.matches ? "listWeek" : "dayGridMonth",
     headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek" },
     dayMaxEvents: 3,
+    displayEventTime: false, // 時段已經手動組進 title（13:00~14:00），不用 FullCalendar 自己再加一次
     events: fetchEvents,
     dateClick: (info) => openCreateModal(info.dateStr),
     eventClick: (info) => openEditModal(parseInt(info.event.extendedProps.lessonId, 10)),
