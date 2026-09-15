@@ -8,6 +8,7 @@ from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PackageStatus, PaymentStatus
 from app.package_logic import (
+    available_sessions,
     generate_package_lessons,
     recompute_package_pricing,
     recompute_remaining_sessions,
@@ -25,6 +26,7 @@ def _to_out(package: models.Package) -> schemas.PackageOut:
         session_duration=package.session_duration,
         total_sessions=package.total_sessions,
         remaining_sessions=package.remaining_sessions,
+        available_sessions=available_sessions(package),
         coach_fee_per_hour=package.coach_fee_per_hour,
         venue_fee_per_hour=package.venue_fee_per_hour,
         total_price=package.total_price,
@@ -64,12 +66,16 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     venue = db.get(models.Venue, package.default_venue_id)
     if venue is None:
         raise HTTPException(status_code=404, detail="場地不存在")
-    if not package.session_dates:
-        raise HTTPException(status_code=400, detail="請至少選擇一個上課日期")
-
     dates = sorted(set(package.session_dates))
-    total_sessions = len(dates)
-    start_date = dates[0]
+    if dates:
+        total_sessions = len(dates)
+        start_date = dates[0]
+    else:
+        # 臨時約時間：先收款開一張額度，之後在行事曆逐堂新增再掛回這個套組
+        if not package.total_sessions or package.total_sessions < 1:
+            raise HTTPException(status_code=400, detail="請選擇上課日期，或填寫預購堂數（臨時約時間）")
+        total_sessions = package.total_sessions
+        start_date = package.purchased_date
     recur_weekday = (start_date.weekday() + 1) % 7  # 對齊前端 JS Date.getDay()：0=週日
 
     db_package = models.Package(
@@ -93,8 +99,9 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     )
     db.add(db_package)
     db.flush()  # 取得 db_package.id 供 lessons 使用
-    generate_package_lessons(db, db_package, dates)
-    db.flush()
+    if dates:
+        generate_package_lessons(db, db_package, dates)
+        db.flush()
     recompute_package_pricing(db, db_package)
     db.commit()
     db.refresh(db_package)

@@ -85,7 +85,8 @@ class LessonBase(BaseModel):
 
 
 class LessonCreate(LessonBase):
-    pass
+    package_id: int | None = None
+    """掛在某個「臨時約時間」套組上；此時金額／收款狀態改由套組控管，並會佔用一堂套組額度。"""
 
 
 class LessonUpdate(LessonBase):
@@ -146,8 +147,11 @@ class PackageBase(BaseModel):
 
 
 class PackageCreate(PackageBase):
-    session_dates: list[date]
-    """使用者手動選定的上課日期清單（不假設每週固定間隔，方便跳過連假）；堂數＝清單長度。"""
+    session_dates: list[date] = []
+    """使用者手動選定的上課日期清單（不假設每週固定間隔，方便跳過連假）；堂數＝清單長度。
+    留空表示「臨時約時間」：先收款、之後在行事曆逐堂新增再掛回這個套組，此時改用 total_sessions 欄位。"""
+    total_sessions: int | None = None
+    """僅在 session_dates 留空時需要：臨時約時間模式下的預購堂數。"""
 
 
 class PackageUpdate(BaseModel):
@@ -179,6 +183,7 @@ class PackageOut(BaseModel):
     session_duration: int
     total_sessions: int
     remaining_sessions: int
+    available_sessions: int
     coach_fee_per_hour: float
     venue_fee_per_hour: float
     total_price: float

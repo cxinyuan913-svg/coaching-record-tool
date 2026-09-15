@@ -9,6 +9,7 @@ from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PaymentStatus
 from app.package_logic import (
+    available_sessions,
     mark_leave_and_reschedule,
     recompute_package_pricing,
     recompute_remaining_sessions,
@@ -62,7 +63,8 @@ def list_lessons(
 
 @router.post("", response_model=schemas.LessonOut, status_code=201)
 def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
-    """僅建立單堂制課程；套組課程一律透過「新增套組」批次產生。"""
+    """建立單堂課程；可選擇掛在某個「臨時約時間」套組上，此時金額／收款狀態改由套組控管
+    並佔用一堂套組額度（見 spec/core.md 臨時約時間套組）。"""
     student = db.get(models.Student, lesson.student_id)
     if student is None:
         raise HTTPException(status_code=404, detail="學生不存在")
@@ -70,24 +72,53 @@ def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
     if venue is None:
         raise HTTPException(status_code=404, detail="場地不存在")
 
-    revenue_amount = lesson.revenue_amount
-    if revenue_amount is None:
-        revenue_amount = resolve_price(db, student.tier, lesson.headcount, lesson.duration)
+    package = None
+    if lesson.package_id is not None:
+        package = db.get(models.Package, lesson.package_id)
+        if package is None:
+            raise HTTPException(status_code=404, detail="套組不存在")
+        if package.student_id != lesson.student_id:
+            raise HTTPException(status_code=400, detail="此套組不屬於所選學生")
+        if available_sessions(package) <= 0:
+            raise HTTPException(
+                status_code=400, detail="此套組已無剩餘額度，請改選單堂計費或先增訂套組堂數"
+            )
+
+    if package is not None:
+        hours = lesson.duration / 60
+        revenue_amount = round(package.coach_fee_per_hour * hours, 2)
+        venue_fee_amount = round(package.venue_fee_per_hour * hours, 2)
+        payment_status = package.payment_status
+        payment_date = package.payment_date
+        sequence_no = len(package.lessons) + 1
+    else:
+        revenue_amount = lesson.revenue_amount
+        if revenue_amount is None:
+            revenue_amount = resolve_price(db, student.tier, lesson.headcount, lesson.duration)
+        venue_fee_amount = lesson.venue_fee_amount
+        payment_status = lesson.payment_status
+        payment_date = date_type.today() if lesson.payment_status == PaymentStatus.PAID else None
+        sequence_no = None
 
     db_lesson = models.Lesson(
         student_id=lesson.student_id,
         venue_id=lesson.venue_id,
-        package_id=None,
+        package_id=lesson.package_id,
         date=lesson.date,
         start_time=lesson.start_time,
         duration=lesson.duration,
         headcount=lesson.headcount,
-        payment_status=lesson.payment_status,
-        payment_date=date_type.today() if lesson.payment_status == PaymentStatus.PAID else None,
+        sequence_no=sequence_no,
+        deduct_session=package is not None,
+        payment_status=payment_status,
+        payment_date=payment_date,
         revenue_amount=revenue_amount,
-        venue_fee_amount=lesson.venue_fee_amount,
+        venue_fee_amount=venue_fee_amount,
     )
     db.add(db_lesson)
+    if package is not None:
+        db.flush()
+        recompute_package_pricing(db, package)
     db.commit()
     db.refresh(db_lesson)
     return _to_out(db_lesson)

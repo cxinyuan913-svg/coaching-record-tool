@@ -79,6 +79,17 @@
           <input id="f-start-date" type="date" required />
           <span id="weekday-hint" style="font-size: 12px; color: #888"></span>
         </div>
+        <div class="form-row" id="row-schedule-mode">
+          <label>上課日期安排方式</label>
+          <div style="display: flex; gap: 16px; align-items: center; font-size: 14px">
+            <label style="display: flex; align-items: center; gap: 4px; font-weight: 400">
+              <input type="radio" name="schedule-mode" id="mode-dates" value="dates" checked /> 已排定日期
+            </label>
+            <label style="display: flex; align-items: center; gap: 4px; font-weight: 400">
+              <input type="radio" name="schedule-mode" id="mode-adhoc" value="adhoc" /> 臨時約時間（先收款，之後在行事曆逐堂新增）
+            </label>
+          </div>
+        </div>
         <div class="form-row" id="row-session-dates">
           <label>上課日期（直接在月曆上點選，可跨月份累積；點已選的日期可取消）</label>
           <div id="date-picker" style="border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fff">

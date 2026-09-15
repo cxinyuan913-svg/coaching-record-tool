@@ -147,6 +147,47 @@ function updateTotalAmountDisplay() {
   document.getElementById("total-amount-display").textContent = coachFee + venueFee;
 }
 
+// 新增課程時，依所選學生列出還有剩餘額度的「臨時約時間」套組，可選擇掛上去
+async function loadPackageOptionsForStudent() {
+  const studentId = parseInt(document.getElementById("f-student").value, 10);
+  const select = document.getElementById("f-package");
+  select.innerHTML = '<option value="">不屬於套組（單堂計費）</option>';
+  if (!studentId) return;
+  const packages = await api.get(`/api/packages?student_id=${studentId}&status=active`);
+  packages
+    .filter((p) => p.available_sessions > 0)
+    .forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.name}（還剩${p.available_sessions}堂可約）`;
+      select.appendChild(opt);
+    });
+}
+
+// 選擇／取消選擇套組時，帶入套組的預設時段與費率，並鎖住金額／收款狀態（由套組控管）
+async function handlePackageSelectChange() {
+  const val = document.getElementById("f-package").value;
+  if (!val) {
+    editingPackage = null;
+    document.getElementById("f-amount").disabled = false;
+    document.getElementById("f-venue-fee").disabled = false;
+    document.getElementById("f-payment").disabled = false;
+    document.getElementById("package-note").style.display = "none";
+  } else {
+    editingPackage = await api.get(`/api/packages/${val}`);
+    document.getElementById("f-venue").value = editingPackage.default_venue_id;
+    document.getElementById("f-duration").value = editingPackage.session_duration;
+    setTimeSelectValue("f-time-hour", "f-time-minute", editingPackage.recur_start_time.slice(0, 5));
+    document.getElementById("f-payment").value = editingPackage.payment_status;
+    document.getElementById("f-amount").disabled = true;
+    document.getElementById("f-venue-fee").disabled = true;
+    document.getElementById("f-payment").disabled = true;
+    document.getElementById("package-note").style.display = "";
+  }
+  refreshSuggestedPrice();
+  updateTotalAmountDisplay();
+}
+
 function openCreateModal(dateStr) {
   if (students.length === 0 || venues.length === 0) {
     alert("請先至「學生管理」與「場地管理」新增資料");
@@ -156,6 +197,7 @@ function openCreateModal(dateStr) {
   editingLesson = null;
   editingPackage = null;
   document.getElementById("modal-title").textContent = "新增課程";
+  document.getElementById("row-package").style.display = "";
   document.getElementById("f-student").selectedIndex = 0;
   document.getElementById("f-venue").selectedIndex = 0;
   document.getElementById("f-date").value = dateStr || "";
@@ -172,6 +214,8 @@ function openCreateModal(dateStr) {
   document.getElementById("row-status").style.display = "none";
   document.getElementById("btn-delete").style.display = "none";
   document.getElementById("adjustments-section").style.display = "none";
+  document.getElementById("f-package").value = "";
+  loadPackageOptionsForStudent();
   refreshSuggestedPrice();
   updateTotalAmountDisplay();
   document.getElementById("lesson-modal").classList.add("open");
@@ -184,6 +228,7 @@ async function openEditModal(lessonId) {
   const isPackage = !!lesson.package_id;
   editingPackage = isPackage ? await api.get(`/api/packages/${lesson.package_id}`) : null;
   document.getElementById("modal-title").textContent = "編輯課程";
+  document.getElementById("row-package").style.display = "none";
   document.getElementById("f-student").value = lesson.student_id;
   document.getElementById("f-venue").value = lesson.venue_id;
   document.getElementById("f-date").value = lesson.date;
@@ -332,6 +377,8 @@ async function handleSave(e) {
       payload.status = newStatus;
       await api.put(`/api/lessons/${editingLessonId}`, payload);
     } else {
+      const packageId = document.getElementById("f-package").value;
+      if (packageId) payload.package_id = parseInt(packageId, 10);
       await api.post("/api/lessons", payload);
     }
     closeModal();
@@ -359,7 +406,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("btn-delete").addEventListener("click", handleDelete);
   document.getElementById("lesson-form").addEventListener("submit", handleSave);
-  document.getElementById("f-student").addEventListener("change", refreshSuggestedPrice);
+  document.getElementById("f-student").addEventListener("change", async () => {
+    document.getElementById("f-package").value = "";
+    await handlePackageSelectChange(); // 換學生時，先清掉舊套組鎖定的欄位
+    await loadPackageOptionsForStudent();
+    refreshSuggestedPrice();
+  });
+  document.getElementById("f-package").addEventListener("change", handlePackageSelectChange);
   document.getElementById("f-headcount").addEventListener("input", refreshSuggestedPrice);
   document.getElementById("f-duration").addEventListener("change", refreshSuggestedPrice);
   document.getElementById("f-amount").addEventListener("input", updateTotalAmountDisplay);
