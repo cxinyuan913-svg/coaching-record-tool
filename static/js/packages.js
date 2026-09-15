@@ -143,11 +143,21 @@ function renderDatePicker() {
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = toLocalDateString(new Date(pickerViewYear, pickerViewMonth, day));
     const selected = selectedDates.includes(dateStr);
+    const holiday = isHoliday(dateStr);
     const cell = document.createElement("button");
     cell.type = "button";
     cell.textContent = day;
     cell.dataset.date = dateStr;
-    cell.style.cssText = `padding:6px 0;border:1px solid ${selected ? "#2a78d6" : "#e0e0e0"};border-radius:4px;background:${selected ? "#2a78d6" : "#fff"};color:${selected ? "#fff" : "#333"};cursor:pointer;font-weight:${selected ? "600" : "400"}`;
+    if (holiday) cell.title = holidayName(dateStr);
+    let border = "#e0e0e0";
+    let background = holiday ? "#fdf1ef" : "#fff";
+    let color = holiday ? "#c0503c" : "#333";
+    if (selected) {
+      border = "#2a78d6";
+      background = "#2a78d6";
+      color = "#fff";
+    }
+    cell.style.cssText = `padding:6px 0;border:1px solid ${border};border-radius:4px;background:${background};color:${color};cursor:pointer;font-weight:${selected ? "600" : "400"}`;
     grid.appendChild(cell);
   }
 }

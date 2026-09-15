@@ -97,6 +97,15 @@ function initCalendar() {
     events: fetchEvents,
     dateClick: (info) => openCreateModal(info.dateStr),
     eventClick: (info) => openEditModal(parseInt(info.event.extendedProps.lessonId, 10)),
+    dayCellClassNames: (arg) => (isHoliday(toLocalDateString(arg.date)) ? ["fc-day-holiday"] : []),
+    dayCellDidMount: (arg) => {
+      const name = holidayName(toLocalDateString(arg.date));
+      if (!name) return;
+      const label = document.createElement("span");
+      label.className = "holiday-label";
+      label.textContent = name;
+      arg.el.querySelector(".fc-daygrid-day-top")?.appendChild(label);
+    },
   });
   calendar.render();
   applyResponsiveView();
