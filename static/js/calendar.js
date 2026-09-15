@@ -4,6 +4,7 @@ let students = [];
 let venues = [];
 let editingLessonId = null;
 let editingLesson = null;
+let editingPackage = null;
 let calendar = null;
 
 function populateSelect(id, items, labelFn) {
@@ -103,9 +104,21 @@ function initCalendar() {
 }
 
 async function refreshSuggestedPrice() {
+  const duration = parseInt(document.getElementById("f-duration").value, 10) || 60;
+
+  if (editingPackage) {
+    // 套組課程：金額由套組費率 × 時長算出，不查價目表
+    const hours = duration / 60;
+    document.getElementById("f-amount").value =
+      Math.round(editingPackage.coach_fee_per_hour * hours * 100) / 100;
+    document.getElementById("f-venue-fee").value =
+      Math.round(editingPackage.venue_fee_per_hour * hours * 100) / 100;
+    updateTotalAmountDisplay();
+    return;
+  }
+
   const studentId = parseInt(document.getElementById("f-student").value, 10);
   const headcount = parseInt(document.getElementById("f-headcount").value, 10) || 1;
-  const duration = parseInt(document.getElementById("f-duration").value, 10) || 60;
   const student = students.find((s) => s.id === studentId);
   if (!student) return;
   try {
@@ -132,6 +145,7 @@ function openCreateModal(dateStr) {
   }
   editingLessonId = null;
   editingLesson = null;
+  editingPackage = null;
   document.getElementById("modal-title").textContent = "新增課程";
   document.getElementById("f-student").selectedIndex = 0;
   document.getElementById("f-venue").selectedIndex = 0;
@@ -143,6 +157,7 @@ function openCreateModal(dateStr) {
   document.getElementById("f-payment").value = "unpaid";
   document.getElementById("f-amount").disabled = false;
   document.getElementById("f-payment").disabled = false;
+  document.getElementById("f-venue-fee").disabled = false;
   document.getElementById("f-venue-fee").value = 0;
   document.getElementById("package-note").style.display = "none";
   document.getElementById("row-status").style.display = "none";
@@ -158,6 +173,7 @@ async function openEditModal(lessonId) {
   editingLessonId = lesson.id;
   editingLesson = lesson;
   const isPackage = !!lesson.package_id;
+  editingPackage = isPackage ? await api.get(`/api/packages/${lesson.package_id}`) : null;
   document.getElementById("modal-title").textContent = "編輯課程";
   document.getElementById("f-student").value = lesson.student_id;
   document.getElementById("f-venue").value = lesson.venue_id;
@@ -170,6 +186,7 @@ async function openEditModal(lessonId) {
   document.getElementById("f-payment").value = lesson.payment_status;
   document.getElementById("f-status").value = lesson.status;
   document.getElementById("f-amount").disabled = isPackage;
+  document.getElementById("f-venue-fee").disabled = isPackage;
   document.getElementById("f-payment").disabled = isPackage;
   document.getElementById("package-note").style.display = isPackage ? "" : "none";
   document.getElementById("row-status").style.display = "";
