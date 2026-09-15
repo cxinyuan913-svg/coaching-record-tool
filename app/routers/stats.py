@@ -15,7 +15,8 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 def _sum_lessons(db: Session, start: date_type | None, end: date_type | None) -> float:
     query = db.query(func.coalesce(func.sum(models.Lesson.revenue_amount), 0)).filter(
-        models.Lesson.payment_status == PaymentStatus.PAID
+        models.Lesson.payment_status == PaymentStatus.PAID,
+        models.Lesson.status != LessonStatus.CANCELLED,
     )
     if start is not None:
         query = query.filter(models.Lesson.date >= start)
@@ -70,7 +71,10 @@ def _revenue_by_student(
 
     lesson_rows = (
         db.query(models.Lesson.student_id, func.sum(models.Lesson.revenue_amount))
-        .filter(models.Lesson.payment_status == payment_status)
+        .filter(
+            models.Lesson.payment_status == payment_status,
+            models.Lesson.status != LessonStatus.CANCELLED,
+        )
         .group_by(models.Lesson.student_id)
         .all()
     )
@@ -121,7 +125,10 @@ def revenue_by_month(db: Session = Depends(get_db)):
 
     lesson_rows = (
         db.query(func.strftime("%Y-%m", models.Lesson.date), func.sum(models.Lesson.revenue_amount))
-        .filter(models.Lesson.payment_status == PaymentStatus.PAID)
+        .filter(
+            models.Lesson.payment_status == PaymentStatus.PAID,
+            models.Lesson.status != LessonStatus.CANCELLED,
+        )
         .group_by(func.strftime("%Y-%m", models.Lesson.date))
         .all()
     )
