@@ -54,7 +54,7 @@
           <label for="f-duration">標準單堂時長</label>
           <select id="f-duration" required></select>
         </div>
-        <div class="form-row">
+        <div class="form-row" id="row-total-sessions" style="display: none">
           <label for="f-total-sessions">總堂數</label>
           <input id="f-total-sessions" type="number" min="1" step="1" value="8" required />
         </div>
@@ -74,13 +74,50 @@
           <label for="f-purchased-date">購買日期</label>
           <input id="f-purchased-date" type="date" required />
         </div>
-        <div class="form-row">
+        <div class="form-row" id="row-start-date" style="display: none">
           <label for="f-start-date">第一堂日期</label>
           <input id="f-start-date" type="date" required />
           <span id="weekday-hint" style="font-size: 12px; color: #888"></span>
         </div>
+        <div class="form-row" id="row-session-dates">
+          <label>上課日期（手動選，可跳過連假）</label>
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+            <input id="f-add-date" type="date" />
+            <button type="button" id="btn-add-date" class="secondary">加入這天</button>
+          </div>
+          <div
+            style="
+              margin-top: 8px;
+              padding: 8px;
+              background: #f5f6f8;
+              border-radius: 6px;
+              font-size: 12px;
+              color: #666;
+              display: flex;
+              gap: 6px;
+              align-items: center;
+              flex-wrap: wrap;
+            "
+          >
+            快速帶入：從
+            <input id="f-quick-start" type="date" style="width: 140px" />
+            起，每
+            <input id="f-quick-interval" type="number" min="1" value="7" style="width: 50px" />
+            天一堂，共
+            <input id="f-quick-count" type="number" min="1" value="8" style="width: 50px" />
+            堂
+            <button type="button" id="btn-quick-fill" class="secondary">產生</button>
+          </div>
+          <ul
+            id="date-list"
+            style="list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px"
+          ></ul>
+          <div style="font-size: 12px; color: #555; margin-top: 8px">
+            已選 <strong id="date-count">0</strong> 堂
+          </div>
+        </div>
         <div class="form-row">
-          <label for="f-recur-time-hour">上課時段（24 小時制）</label>
+          <label for="f-recur-time-hour">上課時段（24 小時制，套用到每一天）</label>
           <div style="display: flex; gap: 6px; align-items: center">
             <select id="f-recur-time-hour" required></select>
             <span>:</span>
@@ -107,6 +144,22 @@
           <button type="submit" id="btn-save">儲存並批次排課</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="message-modal">
+    <div class="modal">
+      <h2>課程訊息（可直接貼給學生）</h2>
+      <textarea
+        id="message-text"
+        rows="16"
+        style="width: 100%; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 4px"
+        readonly
+      ></textarea>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="btn-message-close">關閉</button>
+        <button type="button" id="btn-message-copy">複製</button>
+      </div>
     </div>
   </div>
 

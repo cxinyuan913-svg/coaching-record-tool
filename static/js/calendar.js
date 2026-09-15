@@ -33,7 +33,7 @@ function toDateOnly(isoStr) {
 function addDays(dateStr, delta) {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return toLocalDateString(d);
 }
 
 function statusClass(lesson) {
@@ -358,6 +358,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-add-adjustment").addEventListener("click", handleAddAdjustment);
   document.getElementById("adjustment-list").addEventListener("click", handleAdjustmentListClick);
   document.getElementById("btn-add-lesson").addEventListener("click", () => {
-    openCreateModal(new Date().toISOString().slice(0, 10));
+    openCreateModal(toLocalDateString(new Date()));
   });
 });
