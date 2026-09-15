@@ -211,6 +211,30 @@ button.danger {
   color: #777;
 }
 
+.legend-dot.legend-holiday {
+  background: #fbdcd6;
+}
+
+/* 國定假日日格標色（行事曆） */
+.fc-day-holiday {
+  background: #fdf1ef;
+}
+
+.fc-daygrid-day.fc-day-holiday .fc-daygrid-day-number {
+  color: #c0503c;
+}
+
+.holiday-label {
+  display: block;
+  font-size: 11px;
+  color: #c0503c;
+  padding: 0 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 統計卡片 */
 .stat-cards {
   display: grid;
