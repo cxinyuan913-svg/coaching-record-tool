@@ -59,12 +59,14 @@ function renderAdjustments(adjustments) {
   const tbody = document.getElementById("unsettled-adjustments");
   tbody.innerHTML = "";
   if (adjustments.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4">目前沒有未結清差額</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6">目前沒有未結清差額</td></tr>';
     return;
   }
   adjustments.forEach((a) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td>${escapeHtml(a.student_name)}</td>
+      <td>${a.lesson_date}</td>
       <td>${ADJ_TYPE_LABEL[a.type] || a.type}</td>
       <td>${a.amount}</td>
       <td>${escapeHtml(a.note || "")}</td>

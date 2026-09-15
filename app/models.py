@@ -178,3 +178,11 @@ class Adjustment(Base):
     settled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     lesson: Mapped["Lesson"] = relationship(back_populates="adjustments")
+
+    @property
+    def student_name(self) -> str:
+        return self.lesson.student.name
+
+    @property
+    def lesson_date(self):
+        return self.lesson.date
