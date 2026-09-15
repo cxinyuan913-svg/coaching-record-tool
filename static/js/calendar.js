@@ -41,6 +41,18 @@ function statusClass(lesson) {
   return lesson.payment_status === "paid" ? "status-paid" : "status-unpaid";
 }
 
+// 依開始時間＋時長算出結束時間，回傳「顯示用字串」與「事件用的日期時間字串」；
+// 用 Date 物件計算而非純文字加減分鐘，才能正確處理時長跨過午夜的情況
+function computeEndTime(lesson) {
+  const end = new Date(`${lesson.date}T${lesson.start_time}`);
+  end.setMinutes(end.getMinutes() + lesson.duration);
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    label: `${pad(end.getHours())}:${pad(end.getMinutes())}`,
+    dateTime: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}T${pad(end.getHours())}:${pad(end.getMinutes())}:00`,
+  };
+}
+
 function lessonToEvent(lesson) {
   let billing;
   if (!lesson.package_id) {
@@ -50,10 +62,13 @@ function lessonToEvent(lesson) {
   } else {
     billing = "順延堂";
   }
+  const startLabel = lesson.start_time.slice(0, 5);
+  const end = computeEndTime(lesson);
   return {
     id: String(lesson.id),
-    title: `${lesson.start_time.slice(0, 5)} ${lesson.student_name} ${lesson.venue_name}（${billing}）`,
+    title: `${startLabel}~${end.label} ${lesson.student_name} ${lesson.venue_name}（${billing}）`,
     start: `${lesson.date}T${lesson.start_time}`,
+    end: end.dateTime,
     classNames: [statusClass(lesson)],
     extendedProps: { lessonId: lesson.id },
   };
