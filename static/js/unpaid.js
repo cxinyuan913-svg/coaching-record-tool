@@ -143,7 +143,7 @@ async function handleClick(e) {
         note: document.getElementById("edit-adj-note").value.trim() || null,
       });
     } else if (btn.dataset.action === "delete-adjustment") {
-      if (!confirm("確定要刪除這筆差額紀錄嗎？")) return;
+      if (!(await confirmDialog("確定要刪除這筆差額紀錄嗎？"))) return;
       await api.delete(`/api/adjustments/${id}`);
     } else {
       return;

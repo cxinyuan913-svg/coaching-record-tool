@@ -483,7 +483,7 @@ async function handleListClick(e) {
   } else if (btn.dataset.action === "settlement") {
     await openSettlementModal(id);
   } else if (btn.dataset.action === "delete") {
-    if (confirm("確定要刪除這個套組嗎？套組底下所有課程也會一併刪除。")) {
+    if (await confirmDialog("確定要刪除這個套組嗎？套組底下所有課程也會一併刪除。")) {
       try {
         await api.delete(`/api/packages/${id}`);
         await loadPackages();

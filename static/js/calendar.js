@@ -317,6 +317,9 @@ async function handleAdjustmentListClick(e) {
   const btn = e.target.closest("button");
   if (!btn) return;
   const id = btn.dataset.id;
+  if (btn.dataset.action === "delete-adj" && !(await confirmDialog("確定要刪除這筆額外費用嗎？"))) {
+    return;
+  }
   try {
     if (btn.dataset.action === "settle-adj") {
       await api.patch(`/api/adjustments/${id}/settle`, {});
@@ -395,7 +398,7 @@ async function handleSave(e) {
 
 async function handleDelete() {
   if (!editingLessonId) return;
-  if (!confirm("確定要刪除這堂課嗎？")) return;
+  if (!(await confirmDialog("確定要刪除這堂課嗎？"))) return;
   try {
     await api.delete(`/api/lessons/${editingLessonId}`);
     closeModal();

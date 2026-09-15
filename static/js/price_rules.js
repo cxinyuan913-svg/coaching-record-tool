@@ -78,7 +78,7 @@ async function handleListClick(e) {
     const rule = await api.get(`/api/price_rules/${id}`);
     openModal(rule);
   } else if (btn.dataset.action === "delete") {
-    if (confirm("確定要刪除這條價目規則嗎？")) {
+    if (await confirmDialog("確定要刪除這條價目規則嗎？")) {
       try {
         await api.delete(`/api/price_rules/${id}`);
         await loadRules();
