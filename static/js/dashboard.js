@@ -27,11 +27,11 @@ function hideTooltip() {
 }
 
 // 每位學生總學費：水平長條圖，由高到低排列
-function renderStudentChart(items) {
-  const root = document.getElementById("student-chart");
+function renderStudentChart(items, rootId, seriesClass, emptyText) {
+  const root = document.getElementById(rootId);
   root.innerHTML = "";
   if (items.length === 0) {
-    root.innerHTML = '<p class="chart-empty">目前沒有已收款的紀錄</p>';
+    root.innerHTML = `<p class="chart-empty">${emptyText}</p>`;
     return;
   }
 
@@ -68,7 +68,7 @@ function renderStudentChart(items) {
     rect.setAttribute("width", barLen);
     rect.setAttribute("height", barHeight);
     rect.setAttribute("rx", 4);
-    rect.setAttribute("class", "chart-bar");
+    rect.setAttribute("class", `chart-bar ${seriesClass}`);
     svg.appendChild(rect);
 
     const value = document.createElementNS(SVG_NS, "text");
@@ -94,11 +94,11 @@ function renderStudentChart(items) {
   root.appendChild(svg);
 }
 
-function renderStudentTable(items) {
-  const tbody = document.getElementById("student-table-body");
+function renderStudentTable(items, tbodyId, emptyText) {
+  const tbody = document.getElementById(tbodyId);
   tbody.innerHTML = "";
   if (items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2">目前沒有已收款的紀錄</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="2">${emptyText}</td></tr>`;
     return;
   }
   items.forEach((item) => {
@@ -202,14 +202,17 @@ function renderMonthTable(items) {
 }
 
 async function loadCharts() {
-  const [byStudent, byMonth] = await Promise.all([
+  const [byStudent, byMonth, unpaidByStudent] = await Promise.all([
     api.get("/api/stats/by_student"),
     api.get("/api/stats/by_month"),
+    api.get("/api/stats/unpaid_by_student"),
   ]);
-  renderStudentChart(byStudent);
-  renderStudentTable(byStudent);
+  renderStudentChart(byStudent, "student-chart", "", "目前沒有已收款的紀錄");
+  renderStudentTable(byStudent, "student-table-body", "目前沒有已收款的紀錄");
   renderMonthChart(byMonth);
   renderMonthTable(byMonth);
+  renderStudentChart(unpaidByStudent, "unpaid-chart", "series-2", "目前沒有應收未收的金額");
+  renderStudentTable(unpaidByStudent, "unpaid-table-body", "目前沒有應收未收的金額");
 }
 
 function handleChartToggle(e) {
