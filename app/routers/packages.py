@@ -64,22 +64,27 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     venue = db.get(models.Venue, package.default_venue_id)
     if venue is None:
         raise HTTPException(status_code=404, detail="場地不存在")
-    if not 0 <= package.recur_weekday <= 6:
-        raise HTTPException(status_code=400, detail="recur_weekday 必須介於 0-6")
+    if not package.session_dates:
+        raise HTTPException(status_code=400, detail="請至少選擇一個上課日期")
+
+    dates = sorted(set(package.session_dates))
+    total_sessions = len(dates)
+    start_date = dates[0]
+    recur_weekday = (start_date.weekday() + 1) % 7  # 對齊前端 JS Date.getDay()：0=週日
 
     db_package = models.Package(
         student_id=package.student_id,
         name=package.name,
         session_duration=package.session_duration,
-        total_sessions=package.total_sessions,
-        remaining_sessions=package.total_sessions,
+        total_sessions=total_sessions,
+        remaining_sessions=total_sessions,
         coach_fee_per_hour=package.coach_fee_per_hour,
         venue_fee_per_hour=package.venue_fee_per_hour,
         total_price=0,
         price_per_session=0,
         purchased_date=package.purchased_date,
-        start_date=package.start_date,
-        recur_weekday=package.recur_weekday,
+        start_date=start_date,
+        recur_weekday=recur_weekday,
         recur_start_time=package.recur_start_time,
         default_venue_id=package.default_venue_id,
         status=PackageStatus.ACTIVE,
@@ -88,7 +93,7 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     )
     db.add(db_package)
     db.flush()  # 取得 db_package.id 供 lessons 使用
-    generate_package_lessons(db, db_package)
+    generate_package_lessons(db, db_package, dates)
     db.flush()
     recompute_package_pricing(db, db_package)
     db.commit()

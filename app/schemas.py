@@ -137,19 +137,17 @@ class PackageBase(BaseModel):
     student_id: int
     name: str
     session_duration: int
-    total_sessions: int = 8
     coach_fee_per_hour: float
     venue_fee_per_hour: float = 0
     purchased_date: date
-    start_date: date
-    recur_weekday: int
     recur_start_time: time
     default_venue_id: int
     payment_status: PaymentStatus = PaymentStatus.UNPAID
 
 
 class PackageCreate(PackageBase):
-    pass
+    session_dates: list[date]
+    """使用者手動選定的上課日期清單（不假設每週固定間隔，方便跳過連假）；堂數＝清單長度。"""
 
 
 class PackageUpdate(BaseModel):

@@ -4,9 +4,14 @@ const TIER_LABEL = { new: "新生", friend: "朋友", regular: "熟客" };
 const WEEKDAY_LABEL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 const STATUS_LABEL = { active: "進行中", completed: "已完成", expired: "已過期" };
 
+// 收款訊息固定附上的匯款資訊，之後帳戶異動直接改這裡即可
+const BANK_INFO = "匯款資訊：\n台灣土地銀行（005）\n帳號：076005521269";
+
 let students = [];
 let venues = [];
 let editingId = null;
+let isEditMode = false;
+let selectedDates = []; // 新增套組時手動選的上課日期（YYYY-MM-DD 字串）
 
 function populateSelect(id, items, labelFn) {
   const select = document.getElementById(id);
@@ -27,7 +32,7 @@ async function loadOptions() {
   populateDurationSelect("f-duration");
 }
 
-// 依「第一堂日期」自動推算每週固定上課星期幾，不需要另外詢問
+// 依「第一堂日期」自動推算每週固定上課星期幾，不需要另外詢問（編輯模式用）
 function weekdayOfDate(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr + "T00:00:00").getDay();
@@ -40,12 +45,70 @@ function updateWeekdayHint() {
     weekday === null ? "" : `→ 每週${WEEKDAY_LABEL[weekday]}固定上課`;
 }
 
-// 預估總金額 = (堂課費+場地費)/小時 × 標準時長(小時) × 總堂數，僅供表單即時預覽
+// 上課日期清單（新增套組用）
+function formatDateChip(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAY_LABEL[d.getDay()][1]}）`;
+}
+
+function renderDateList() {
+  selectedDates.sort();
+  const ul = document.getElementById("date-list");
+  ul.innerHTML = "";
+  selectedDates.forEach((dateStr) => {
+    const li = document.createElement("li");
+    li.style.cssText =
+      "background:#eef0f4;border-radius:4px;padding:4px 8px;display:flex;align-items:center;gap:6px;font-size:13px";
+    li.innerHTML = `${formatDateChip(dateStr)} <button type="button" class="danger" data-remove-date="${dateStr}" style="padding:1px 6px">×</button>`;
+    ul.appendChild(li);
+  });
+  document.getElementById("date-count").textContent = selectedDates.length;
+  updateEstimatedTotal();
+}
+
+function addDate(dateStr) {
+  if (!dateStr || selectedDates.includes(dateStr)) return;
+  selectedDates.push(dateStr);
+  renderDateList();
+}
+
+function handleAddDateClick() {
+  const input = document.getElementById("f-add-date");
+  addDate(input.value);
+  input.value = "";
+}
+
+function handleQuickFill() {
+  const start = document.getElementById("f-quick-start").value;
+  const interval = parseInt(document.getElementById("f-quick-interval").value, 10) || 7;
+  const count = parseInt(document.getElementById("f-quick-count").value, 10) || 0;
+  if (!start || count < 1) {
+    alert("請填「從」的日期與堂數");
+    return;
+  }
+  const base = new Date(start + "T00:00:00");
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i * interval);
+    addDate(toLocalDateString(d));
+  }
+}
+
+function handleDateListClick(e) {
+  const btn = e.target.closest("button[data-remove-date]");
+  if (!btn) return;
+  selectedDates = selectedDates.filter((d) => d !== btn.dataset.removeDate);
+  renderDateList();
+}
+
+// 預估總金額 = (堂課費+場地費)/小時 × 標準時長(小時) × 堂數，僅供表單即時預覽
 function updateEstimatedTotal() {
   const coachFee = parseFloat(document.getElementById("f-coach-fee").value) || 0;
   const venueFee = parseFloat(document.getElementById("f-venue-fee").value) || 0;
   const duration = parseInt(document.getElementById("f-duration").value, 10) || 0;
-  const sessions = parseInt(document.getElementById("f-total-sessions").value, 10) || 0;
+  const sessions = isEditMode
+    ? parseInt(document.getElementById("f-total-sessions").value, 10) || 0
+    : selectedDates.length;
   const perSession = Math.round((coachFee + venueFee) * (duration / 60) * 100) / 100;
   const total = Math.round(perSession * sessions * 100) / 100;
   document.getElementById("per-session-display").textContent = perSession;
@@ -73,6 +136,7 @@ async function loadPackages() {
       </td>
       <td>
         <button class="secondary" data-action="edit" data-id="${p.id}">編輯</button>
+        <button class="secondary" data-action="message" data-id="${p.id}">課程訊息</button>
         <button class="secondary" data-action="settlement" data-id="${p.id}">結算單</button>
         <button class="danger" data-action="delete" data-id="${p.id}">刪除</button>
       </td>
@@ -89,31 +153,48 @@ function escapeHtml(str) {
 
 function openModal(pkg) {
   editingId = pkg ? pkg.id : null;
-  const isEdit = !!pkg;
-  document.getElementById("modal-title").textContent = isEdit ? "編輯套組" : "新增套組（批次排課）";
-  document.getElementById("btn-save").textContent = isEdit ? "儲存" : "儲存並批次排課";
-  document.getElementById("f-student").disabled = isEdit;
-  document.getElementById("row-payment").style.display = isEdit ? "none" : "";
-  document.getElementById("edit-note").style.display = isEdit ? "" : "none";
+  isEditMode = !!pkg;
+  document.getElementById("modal-title").textContent = isEditMode ? "編輯套組" : "新增套組（批次排課）";
+  document.getElementById("btn-save").textContent = isEditMode ? "儲存" : "儲存並批次排課";
+  document.getElementById("f-student").disabled = isEditMode;
+  document.getElementById("row-payment").style.display = isEditMode ? "none" : "";
+  document.getElementById("edit-note").style.display = isEditMode ? "" : "none";
+  document.getElementById("row-total-sessions").style.display = isEditMode ? "" : "none";
+  document.getElementById("row-start-date").style.display = isEditMode ? "" : "none";
+  document.getElementById("row-session-dates").style.display = isEditMode ? "none" : "";
+  // 隱藏的欄位不能保留 required，否則 Chrome 仍會擋下表單送出
+  document.getElementById("f-total-sessions").required = isEditMode;
+  document.getElementById("f-start-date").required = isEditMode;
 
   document.getElementById("f-student").value = pkg ? pkg.student_id : students[0]?.id ?? "";
   document.getElementById("f-venue").value = pkg ? pkg.default_venue_id : venues[0]?.id ?? "";
   document.getElementById("f-name").value = pkg ? pkg.name : "8堂1小時套組";
   document.getElementById("f-duration").value = pkg ? pkg.session_duration : "60";
-  document.getElementById("f-total-sessions").value = pkg ? pkg.total_sessions : 8;
   document.getElementById("f-coach-fee").value = pkg ? pkg.coach_fee_per_hour : "";
   document.getElementById("f-venue-fee").value = pkg ? pkg.venue_fee_per_hour : 0;
   document.getElementById("f-purchased-date").value = pkg
     ? pkg.purchased_date
-    : new Date().toISOString().slice(0, 10);
-  document.getElementById("f-start-date").value = pkg ? pkg.start_date : "";
+    : toLocalDateString(new Date());
+
+  if (isEditMode) {
+    document.getElementById("f-total-sessions").value = pkg.total_sessions;
+    document.getElementById("f-start-date").value = pkg.start_date;
+    updateWeekdayHint();
+  } else {
+    selectedDates = [];
+    document.getElementById("f-add-date").value = "";
+    document.getElementById("f-quick-start").value = "";
+    document.getElementById("f-quick-interval").value = 7;
+    document.getElementById("f-quick-count").value = 8;
+    renderDateList();
+  }
+
   setTimeSelectValue(
     "f-recur-time-hour",
     "f-recur-time-minute",
     pkg ? pkg.recur_start_time.slice(0, 5) : "18:00"
   );
   document.getElementById("f-payment").value = "unpaid";
-  updateWeekdayHint();
   updateEstimatedTotal();
   document.getElementById("package-modal").classList.add("open");
 }
@@ -125,34 +206,43 @@ function closeModal() {
 
 async function handleSave(e) {
   e.preventDefault();
-  const payload = {
+  const basePayload = {
     name: document.getElementById("f-name").value.trim(),
     session_duration: parseInt(document.getElementById("f-duration").value, 10),
-    total_sessions: parseInt(document.getElementById("f-total-sessions").value, 10),
     coach_fee_per_hour: parseFloat(document.getElementById("f-coach-fee").value),
     venue_fee_per_hour: parseFloat(document.getElementById("f-venue-fee").value) || 0,
     purchased_date: document.getElementById("f-purchased-date").value,
-    start_date: document.getElementById("f-start-date").value,
-    recur_weekday: weekdayOfDate(document.getElementById("f-start-date").value),
     recur_start_time: getTimeSelectValue("f-recur-time-hour", "f-recur-time-minute") + ":00",
     default_venue_id: parseInt(document.getElementById("f-venue").value, 10),
   };
-  if (
-    !payload.name ||
-    Number.isNaN(payload.coach_fee_per_hour) ||
-    !payload.start_date ||
-    !payload.total_sessions ||
-    payload.total_sessions < 1
-  ) {
-    alert("請完整填寫表單（總堂數需至少為 1）");
+
+  if (!basePayload.name || Number.isNaN(basePayload.coach_fee_per_hour)) {
+    alert("請完整填寫表單");
     return;
   }
+
   try {
     if (editingId) {
-      await api.put(`/api/packages/${editingId}`, payload);
+      const totalSessions = parseInt(document.getElementById("f-total-sessions").value, 10);
+      const startDate = document.getElementById("f-start-date").value;
+      if (!startDate || !totalSessions || totalSessions < 1) {
+        alert("請完整填寫表單（總堂數需至少為 1）");
+        return;
+      }
+      await api.put(`/api/packages/${editingId}`, {
+        ...basePayload,
+        total_sessions: totalSessions,
+        start_date: startDate,
+        recur_weekday: weekdayOfDate(startDate),
+      });
     } else {
+      if (selectedDates.length === 0) {
+        alert("請至少選擇一個上課日期");
+        return;
+      }
       await api.post("/api/packages", {
-        ...payload,
+        ...basePayload,
+        session_dates: selectedDates,
         student_id: parseInt(document.getElementById("f-student").value, 10),
         payment_status: document.getElementById("f-payment").value,
       });
@@ -203,6 +293,71 @@ async function handleSettleAll() {
   }
 }
 
+// 課程訊息產生（可直接貼給學生）
+function chineseNumber(n) {
+  const digits = "〇一二三四五六七八九";
+  if (n < 10) return digits[n];
+  if (n < 20) return "十" + (n > 10 ? digits[n - 10] : "");
+  const tens = Math.floor(n / 10);
+  const ones = n % 10;
+  return digits[tens] + "十" + (ones ? digits[ones] : "");
+}
+
+function formatDateWithWeekday(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAY_LABEL[d.getDay()][1]}）`;
+}
+
+function addMinutes(timeStr, minutes) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + m + minutes;
+  const rh = Math.floor(total / 60) % 24;
+  const rm = total % 60;
+  return `${String(rh).padStart(2, "0")}:${String(rm).padStart(2, "0")}`;
+}
+
+function buildLineMessage(pkg, lessons) {
+  const totalHours = (pkg.total_sessions * pkg.session_duration) / 60;
+  const [py, pm, pd] = pkg.purchased_date.split("-").map(Number);
+  const lines = [];
+  lines.push(`付費日期：${py}/${pm}/${pd}（${Math.round(pkg.total_price)}）`);
+  lines.push(`羽球課程${totalHours}小時（場地費以${Math.round(pkg.venue_fee_per_hour)}元記）`);
+  lines.push("");
+  const active = lessons
+    .filter((l) => l.status !== "leave")
+    .slice()
+    .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
+  active.forEach((lesson, idx) => {
+    const start = lesson.start_time.slice(0, 5);
+    const end = addMinutes(start, lesson.duration);
+    lines.push(
+      `第${chineseNumber(idx + 1)}堂課：${formatDateWithWeekday(lesson.date)}${start}～${end}`
+    );
+  });
+  lines.push("");
+  lines.push(BANK_INFO);
+  return lines.join("\n");
+}
+
+async function openMessageModal(packageId) {
+  const [pkg, lessons] = await Promise.all([
+    api.get(`/api/packages/${packageId}`),
+    api.get(`/api/packages/${packageId}/lessons`),
+  ]);
+  document.getElementById("message-text").value = buildLineMessage(pkg, lessons);
+  document.getElementById("message-modal").classList.add("open");
+}
+
+async function handleCopyMessage() {
+  const text = document.getElementById("message-text").value;
+  try {
+    await navigator.clipboard.writeText(text);
+    alert("已複製到剪貼簿");
+  } catch (err) {
+    alert("複製失敗，請手動選取文字後 Ctrl+C");
+  }
+}
+
 async function handleListClick(e) {
   const btn = e.target.closest("button");
   if (!btn) return;
@@ -218,6 +373,8 @@ async function handleListClick(e) {
   } else if (btn.dataset.action === "edit") {
     const pkg = await api.get(`/api/packages/${id}`);
     openModal(pkg);
+  } else if (btn.dataset.action === "message") {
+    await openMessageModal(id);
   } else if (btn.dataset.action === "settlement") {
     await openSettlementModal(id);
   } else if (btn.dataset.action === "delete") {
@@ -243,9 +400,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("settlement-modal").classList.remove("open");
   });
   document.getElementById("btn-settle-all").addEventListener("click", handleSettleAll);
+  document.getElementById("btn-message-close").addEventListener("click", () => {
+    document.getElementById("message-modal").classList.remove("open");
+  });
+  document.getElementById("btn-message-copy").addEventListener("click", handleCopyMessage);
   document.getElementById("f-start-date").addEventListener("change", updateWeekdayHint);
   document.getElementById("f-coach-fee").addEventListener("input", updateEstimatedTotal);
   document.getElementById("f-venue-fee").addEventListener("input", updateEstimatedTotal);
   document.getElementById("f-duration").addEventListener("change", updateEstimatedTotal);
   document.getElementById("f-total-sessions").addEventListener("input", updateEstimatedTotal);
+  document.getElementById("btn-add-date").addEventListener("click", handleAddDateClick);
+  document.getElementById("btn-quick-fill").addEventListener("click", handleQuickFill);
+  document.getElementById("date-list").addEventListener("click", handleDateListClick);
 });

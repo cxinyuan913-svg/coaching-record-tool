@@ -1,5 +1,14 @@
 // 共用 fetch 工具與導覽列 active 狀態標示
 
+// 依「本地時區」格式化成 YYYY-MM-DD；絕對不要用 toISOString().slice(0,10)，
+// 那是轉成 UTC 後才截字串，在 UTC+8 會把日期往前拉一天（例如本地 10/6 變成 10/5）
+function toLocalDateString(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 async function apiRequest(method, url, body) {
   const res = await fetch(url, {
     method,

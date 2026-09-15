@@ -9,15 +9,18 @@ from app.models import AdjustmentType, LessonStatus, PackageStatus
 from app.pricing import resolve_price
 
 
-def generate_package_lessons(db: Session, package: models.Package) -> None:
-    """依套組的起始日、週幾、時段，一次產生 total_sessions 筆 lessons。"""
+def generate_package_lessons(db: Session, package: models.Package, dates: list) -> None:
+    """依使用者手動選定的日期清單，一次產生對應堂數的 lessons（時段/時長統一套用套組設定）。
+
+    dates 需已排序；堂數 = len(dates)，不再假設每週固定間隔（因應連假手動跳過的情境）。
+    """
     hours = package.session_duration / 60
-    for i in range(package.total_sessions):
+    for i, lesson_date in enumerate(dates):
         lesson = models.Lesson(
             student_id=package.student_id,
             venue_id=package.default_venue_id,
             package_id=package.id,
-            date=package.start_date + timedelta(weeks=i),
+            date=lesson_date,
             start_time=package.recur_start_time,
             duration=package.session_duration,
             headcount=1,
