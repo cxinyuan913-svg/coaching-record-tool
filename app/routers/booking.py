@@ -1,4 +1,5 @@
 """訂場檢查 API（見 SPEC.md 訂場開放時間）。"""
+from datetime import date as date_type
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,7 +27,10 @@ def booking_check(db: Session = Depends(get_db)):
     now = datetime.now()
     lessons = (
         db.query(models.Lesson)
-        .filter(models.Lesson.status == LessonStatus.SCHEDULED)
+        .filter(
+            models.Lesson.status == LessonStatus.SCHEDULED,
+            models.Lesson.date >= date_type.today(),  # 日期已過的課程不用再提醒訂場
+        )
         .order_by(models.Lesson.date, models.Lesson.start_time)
         .all()
     )
