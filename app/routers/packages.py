@@ -10,6 +10,7 @@ from app.models import LessonStatus, PackageStatus, PaymentStatus
 from app.package_logic import (
     available_sessions,
     generate_package_lessons,
+    live_status,
     recompute_package_pricing,
     recompute_remaining_sessions,
     remaining_sessions,
@@ -38,7 +39,7 @@ def _to_out(package: models.Package) -> schemas.PackageOut:
         recur_start_time=package.recur_start_time,
         default_venue_id=package.default_venue_id,
         venue_name=package.default_venue.name,
-        status=package.status,
+        status=live_status(package),
         payment_status=package.payment_status,
         payment_date=package.payment_date,
     )
@@ -53,9 +54,10 @@ def list_packages(
     query = db.query(models.Package)
     if student_id is not None:
         query = query.filter(models.Package.student_id == student_id)
-    if status is not None:
-        query = query.filter(models.Package.status == status)
     packages = query.order_by(models.Package.id.desc()).all()
+    if status is not None:
+        # 狀態即時計算（見 live_status），不能直接下推到 SQL 篩選欄位值
+        packages = [p for p in packages if live_status(p) == status]
     return [_to_out(p) for p in packages]
 
 
