@@ -224,6 +224,8 @@ class AdjustmentOut(AdjustmentBase):
     id: int
     settled: bool
     settled_at: datetime | None
+    student_name: str
+    lesson_date: date
 
 
 class UnpaidSummary(BaseModel):
