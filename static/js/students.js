@@ -97,7 +97,7 @@ async function handleListClick(e) {
     const student = await api.get(`/api/students/${id}`);
     openModal(student);
   } else if (btn.dataset.action === "delete") {
-    if (confirm("確定要刪除這位學生嗎？")) {
+    if (await confirmDialog("確定要刪除這位學生嗎？")) {
       try {
         await api.delete(`/api/students/${id}`);
         await loadStudents();

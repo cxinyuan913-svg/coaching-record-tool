@@ -37,6 +37,36 @@ const api = {
   delete: (url) => apiRequest("DELETE", url),
 };
 
+// 置中的確認視窗，取代原生 confirm()（原生樣式無法客製、還會從瀏覽器頂端跳出）；
+// 用法：if (await confirmDialog("確定要刪除嗎？")) { ... }
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop open";
+    backdrop.innerHTML = `
+      <div class="modal" style="max-width: 360px">
+        <p style="margin-top: 0; white-space: pre-wrap">${message}</p>
+        <div class="modal-actions">
+          <button type="button" class="secondary" data-role="cancel">取消</button>
+          <button type="button" class="danger" data-role="confirm">確定</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    function finish(result) {
+      backdrop.remove();
+      resolve(result);
+    }
+
+    backdrop.querySelector('[data-role="confirm"]').addEventListener("click", () => finish(true));
+    backdrop.querySelector('[data-role="cancel"]').addEventListener("click", () => finish(false));
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) finish(false); // 點背景視同取消
+    });
+  });
+}
+
 // 時間選單（24 小時制，僅 00/30 分）：填入時／分兩個 select
 // withPlaceholder=true 會給「時」加一個未選取的空白選項，強制使用者主動選時間；
 // 「分」一律預設 00，選了時之後不用再手動選分鐘

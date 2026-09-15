@@ -97,7 +97,7 @@ async function handleListClick(e) {
     const venue = await api.get(`/api/venues/${id}`);
     openModal(venue);
   } else if (btn.dataset.action === "delete") {
-    if (confirm("確定要刪除這個場地嗎？")) {
+    if (await confirmDialog("確定要刪除這個場地嗎？")) {
       try {
         await api.delete(`/api/venues/${id}`);
         await loadVenues();
