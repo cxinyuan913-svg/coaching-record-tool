@@ -12,6 +12,8 @@ let venues = [];
 let editingId = null;
 let isEditMode = false;
 let selectedDates = []; // 新增套組時手動選的上課日期（YYYY-MM-DD 字串）
+let pickerViewYear = null; // 上課日期月曆目前顯示的年份
+let pickerViewMonth = null; // 上課日期月曆目前顯示的月份（0-11）
 
 function populateSelect(id, items, labelFn) {
   const select = document.getElementById(id);
@@ -70,12 +72,21 @@ function addDate(dateStr) {
   if (!dateStr || selectedDates.includes(dateStr)) return;
   selectedDates.push(dateStr);
   renderDateList();
+  renderDatePicker();
 }
 
-function handleAddDateClick() {
-  const input = document.getElementById("f-add-date");
-  addDate(input.value);
-  input.value = "";
+function removeDate(dateStr) {
+  selectedDates = selectedDates.filter((d) => d !== dateStr);
+  renderDateList();
+  renderDatePicker();
+}
+
+function toggleDate(dateStr) {
+  if (selectedDates.includes(dateStr)) {
+    removeDate(dateStr);
+  } else {
+    addDate(dateStr);
+  }
 }
 
 function handleQuickFill() {
@@ -92,13 +103,59 @@ function handleQuickFill() {
     d.setDate(d.getDate() + i * interval);
     addDate(toLocalDateString(d));
   }
+  setPickerView(base.getFullYear(), base.getMonth());
 }
 
 function handleDateListClick(e) {
   const btn = e.target.closest("button[data-remove-date]");
   if (!btn) return;
-  selectedDates = selectedDates.filter((d) => d !== btn.dataset.removeDate);
-  renderDateList();
+  removeDate(btn.dataset.removeDate);
+}
+
+// 上課日期月曆（新增套組用）：點日期格子切換選取，可跨月翻頁累積選取
+function setPickerView(year, month) {
+  const d = new Date(year, month, 1);
+  pickerViewYear = d.getFullYear();
+  pickerViewMonth = d.getMonth();
+  renderDatePicker();
+}
+
+function shiftPickerMonth(delta) {
+  setPickerView(pickerViewYear, pickerViewMonth + delta);
+}
+
+function renderDatePicker() {
+  if (pickerViewYear === null) return;
+  document.getElementById("picker-label").textContent = `${pickerViewYear}年${pickerViewMonth + 1}月`;
+  const grid = document.getElementById("picker-grid");
+  grid.innerHTML = "";
+  WEEKDAY_LABEL.forEach((w) => {
+    const cell = document.createElement("div");
+    cell.style.cssText = "font-weight:600;color:#888;padding:4px 0";
+    cell.textContent = w[1];
+    grid.appendChild(cell);
+  });
+  const startOffset = new Date(pickerViewYear, pickerViewMonth, 1).getDay();
+  const daysInMonth = new Date(pickerViewYear, pickerViewMonth + 1, 0).getDate();
+  for (let i = 0; i < startOffset; i++) {
+    grid.appendChild(document.createElement("div"));
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = toLocalDateString(new Date(pickerViewYear, pickerViewMonth, day));
+    const selected = selectedDates.includes(dateStr);
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.textContent = day;
+    cell.dataset.date = dateStr;
+    cell.style.cssText = `padding:6px 0;border:1px solid ${selected ? "#2a78d6" : "#e0e0e0"};border-radius:4px;background:${selected ? "#2a78d6" : "#fff"};color:${selected ? "#fff" : "#333"};cursor:pointer;font-weight:${selected ? "600" : "400"}`;
+    grid.appendChild(cell);
+  }
+}
+
+function handlePickerGridClick(e) {
+  const btn = e.target.closest("button[data-date]");
+  if (!btn) return;
+  toggleDate(btn.dataset.date);
 }
 
 // 預估總金額 = (堂課費+場地費)/小時 × 標準時長(小時) × 堂數，僅供表單即時預覽
@@ -182,10 +239,11 @@ function openModal(pkg) {
     updateWeekdayHint();
   } else {
     selectedDates = [];
-    document.getElementById("f-add-date").value = "";
     document.getElementById("f-quick-start").value = "";
     document.getElementById("f-quick-interval").value = 7;
     document.getElementById("f-quick-count").value = 8;
+    const today = new Date();
+    setPickerView(today.getFullYear(), today.getMonth());
     renderDateList();
   }
 
@@ -409,7 +467,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("f-venue-fee").addEventListener("input", updateEstimatedTotal);
   document.getElementById("f-duration").addEventListener("change", updateEstimatedTotal);
   document.getElementById("f-total-sessions").addEventListener("input", updateEstimatedTotal);
-  document.getElementById("btn-add-date").addEventListener("click", handleAddDateClick);
   document.getElementById("btn-quick-fill").addEventListener("click", handleQuickFill);
   document.getElementById("date-list").addEventListener("click", handleDateListClick);
+  document.getElementById("picker-prev").addEventListener("click", () => shiftPickerMonth(-1));
+  document.getElementById("picker-next").addEventListener("click", () => shiftPickerMonth(1));
+  document.getElementById("picker-grid").addEventListener("click", handlePickerGridClick);
 });
