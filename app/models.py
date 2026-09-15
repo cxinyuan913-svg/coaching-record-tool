@@ -54,6 +54,7 @@ class BookingStatus(str, enum.Enum):
 class AdjustmentType(str, enum.Enum):
     HEADCOUNT_DIFF = "headcount_diff"
     VENUE_FEE = "venue_fee"
+    VENUE_CHANGE = "venue_change"
     OTHER = "other"
 
 

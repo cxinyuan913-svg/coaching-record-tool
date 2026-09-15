@@ -258,7 +258,12 @@ async function openEditModal(lessonId) {
 }
 
 async function loadAdjustments() {
-  const ADJ_TYPE_LABEL = { headcount_diff: "人數差額", venue_fee: "場地費", other: "其他" };
+  const ADJ_TYPE_LABEL = {
+    headcount_diff: "人數差額",
+    venue_fee: "場地費",
+    venue_change: "臨時改場地",
+    other: "其他",
+  };
   const adjustments = await api.get(`/api/adjustments?lesson_id=${editingLessonId}`);
   const tbody = document.getElementById("adjustment-list");
   tbody.innerHTML = "";
