@@ -14,9 +14,16 @@ async function loadStudents() {
     (packagesByStudent[p.student_id] = packagesByStudent[p.student_id] || []).push(p);
   });
 
+  // 有進行中套組（有約課）的學生排前面，沒約課的排後面；同一組內維持原本順序
+  const sortedStudents = [...students].sort((a, b) => {
+    const aHasPkg = (packagesByStudent[a.id] || []).length > 0;
+    const bHasPkg = (packagesByStudent[b.id] || []).length > 0;
+    return (bHasPkg ? 1 : 0) - (aHasPkg ? 1 : 0);
+  });
+
   const tbody = document.getElementById("student-list");
   tbody.innerHTML = "";
-  students.forEach((s) => {
+  sortedStudents.forEach((s) => {
     const pkgs = packagesByStudent[s.id] || [];
     const pkgSummary = pkgs
       .map((p) => `${escapeHtml(p.name)}（${p.remaining_sessions}/${p.total_sessions}）`)
