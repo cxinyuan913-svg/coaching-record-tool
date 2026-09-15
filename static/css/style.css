@@ -88,6 +88,18 @@ button.danger {
   background: #e35555;
 }
 
+/* 收款狀態按鈕：未收款要顯眼，提醒還沒收到錢；已收款則低調帶過 */
+button.status-unpaid {
+  background: #f0a030;
+  color: #3a2400;
+  font-weight: 600;
+}
+
+button.status-paid {
+  background: #b6e3c6;
+  color: #1b4d2e;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
