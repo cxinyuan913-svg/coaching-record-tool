@@ -166,19 +166,37 @@ button.status-paid {
   margin-top: 16px;
 }
 
-/* FullCalendar 事件色塊：顏色要夠深，週檢視的細長格子才看得清楚 */
+/* FullCalendar 事件色塊。月檢視是小圓點＋文字（list-item），只有 border-color
+   會拿去畫圓點，所以這裡的顏色深一點沒關係；週檢視是整塊填色（block），
+   同樣的深色拿去整塊塗滿的話面積太大會很搶眼，所以週檢視另外用淺色版本。 */
 .fc-event.status-unpaid {
-  background: #f0a030;
   border-color: #c97f1e;
   color: #3a2400;
   font-weight: 600;
 }
 
 .fc-event.status-paid {
-  background: #6cc194;
   border-color: #4a9e72;
   color: #0f3d22;
   font-weight: 600;
+}
+
+.fc-daygrid-event.status-unpaid {
+  background: #f0a030;
+}
+
+.fc-daygrid-event.status-paid {
+  background: #6cc194;
+}
+
+.fc-timegrid-event.status-unpaid {
+  background: #fbe0b0;
+  color: #6b4400;
+}
+
+.fc-timegrid-event.status-paid {
+  background: #cdeedb;
+  color: #123b25;
 }
 
 /* 行事曆色塊圖例 */
