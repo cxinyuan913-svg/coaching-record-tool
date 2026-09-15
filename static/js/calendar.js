@@ -147,21 +147,24 @@ function updateTotalAmountDisplay() {
   document.getElementById("total-amount-display").textContent = coachFee + venueFee;
 }
 
-// 新增課程時，依所選學生列出還有剩餘額度的「臨時約時間」套組，可選擇掛上去
+// 新增課程時，依所選學生列出還有剩餘額度的「臨時約時間」套組，可選擇掛上去；
+// 有額度可約的話直接預設選起來，不用每次手動改
 async function loadPackageOptionsForStudent() {
   const studentId = parseInt(document.getElementById("f-student").value, 10);
   const select = document.getElementById("f-package");
   select.innerHTML = '<option value="">不屬於套組（單堂計費）</option>';
-  if (!studentId) return;
-  const packages = await api.get(`/api/packages?student_id=${studentId}&status=active`);
-  packages
-    .filter((p) => p.available_sessions > 0)
-    .forEach((p) => {
+  if (studentId) {
+    const packages = await api.get(`/api/packages?student_id=${studentId}&status=active`);
+    const available = packages.filter((p) => p.available_sessions > 0);
+    available.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.id;
       opt.textContent = `${p.name}（還剩${p.available_sessions}堂可約）`;
       select.appendChild(opt);
     });
+    if (available.length > 0) select.value = String(available[0].id);
+  }
+  await handlePackageSelectChange();
 }
 
 // 選擇／取消選擇套組時，帶入套組的預設時段與費率，並鎖住金額／收款狀態（由套組控管）
@@ -214,10 +217,7 @@ function openCreateModal(dateStr) {
   document.getElementById("row-status").style.display = "none";
   document.getElementById("btn-delete").style.display = "none";
   document.getElementById("adjustments-section").style.display = "none";
-  document.getElementById("f-package").value = "";
   loadPackageOptionsForStudent();
-  refreshSuggestedPrice();
-  updateTotalAmountDisplay();
   document.getElementById("lesson-modal").classList.add("open");
 }
 
@@ -406,12 +406,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("btn-delete").addEventListener("click", handleDelete);
   document.getElementById("lesson-form").addEventListener("submit", handleSave);
-  document.getElementById("f-student").addEventListener("change", async () => {
-    document.getElementById("f-package").value = "";
-    await handlePackageSelectChange(); // 換學生時，先清掉舊套組鎖定的欄位
-    await loadPackageOptionsForStudent();
-    refreshSuggestedPrice();
-  });
+  document.getElementById("f-student").addEventListener("change", loadPackageOptionsForStudent);
   document.getElementById("f-package").addEventListener("change", handlePackageSelectChange);
   document.getElementById("f-headcount").addEventListener("input", refreshSuggestedPrice);
   document.getElementById("f-duration").addEventListener("change", refreshSuggestedPrice);
