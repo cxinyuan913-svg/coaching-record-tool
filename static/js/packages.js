@@ -40,6 +40,19 @@ function updateWeekdayHint() {
     weekday === null ? "" : `→ 每週${WEEKDAY_LABEL[weekday]}固定上課`;
 }
 
+// 預估總金額 = (堂課費+場地費)/小時 × 標準時長(小時) × 總堂數，僅供表單即時預覽
+function updateEstimatedTotal() {
+  const coachFee = parseFloat(document.getElementById("f-coach-fee").value) || 0;
+  const venueFee = parseFloat(document.getElementById("f-venue-fee").value) || 0;
+  const duration = parseInt(document.getElementById("f-duration").value, 10) || 0;
+  const sessions = parseInt(document.getElementById("f-total-sessions").value, 10) || 0;
+  const perSession = Math.round((coachFee + venueFee) * (duration / 60) * 100) / 100;
+  const total = Math.round(perSession * sessions * 100) / 100;
+  document.getElementById("per-session-display").textContent = perSession;
+  document.getElementById("total-sessions-display").textContent = sessions;
+  document.getElementById("total-price-display").textContent = total;
+}
+
 async function loadPackages() {
   const packages = await api.get("/api/packages");
   const tbody = document.getElementById("package-list");
@@ -88,7 +101,8 @@ function openModal(pkg) {
   document.getElementById("f-name").value = pkg ? pkg.name : "8堂1小時套組";
   document.getElementById("f-duration").value = pkg ? pkg.session_duration : "60";
   document.getElementById("f-total-sessions").value = pkg ? pkg.total_sessions : 8;
-  document.getElementById("f-total-price").value = pkg ? pkg.total_price : "";
+  document.getElementById("f-coach-fee").value = pkg ? pkg.coach_fee_per_hour : "";
+  document.getElementById("f-venue-fee").value = pkg ? pkg.venue_fee_per_hour : 0;
   document.getElementById("f-purchased-date").value = pkg
     ? pkg.purchased_date
     : new Date().toISOString().slice(0, 10);
@@ -100,6 +114,7 @@ function openModal(pkg) {
   );
   document.getElementById("f-payment").value = "unpaid";
   updateWeekdayHint();
+  updateEstimatedTotal();
   document.getElementById("package-modal").classList.add("open");
 }
 
@@ -114,7 +129,8 @@ async function handleSave(e) {
     name: document.getElementById("f-name").value.trim(),
     session_duration: parseInt(document.getElementById("f-duration").value, 10),
     total_sessions: parseInt(document.getElementById("f-total-sessions").value, 10),
-    total_price: parseFloat(document.getElementById("f-total-price").value),
+    coach_fee_per_hour: parseFloat(document.getElementById("f-coach-fee").value),
+    venue_fee_per_hour: parseFloat(document.getElementById("f-venue-fee").value) || 0,
     purchased_date: document.getElementById("f-purchased-date").value,
     start_date: document.getElementById("f-start-date").value,
     recur_weekday: weekdayOfDate(document.getElementById("f-start-date").value),
@@ -123,7 +139,7 @@ async function handleSave(e) {
   };
   if (
     !payload.name ||
-    Number.isNaN(payload.total_price) ||
+    Number.isNaN(payload.coach_fee_per_hour) ||
     !payload.start_date ||
     !payload.total_sessions ||
     payload.total_sessions < 1
@@ -228,4 +244,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("btn-settle-all").addEventListener("click", handleSettleAll);
   document.getElementById("f-start-date").addEventListener("change", updateWeekdayHint);
+  document.getElementById("f-coach-fee").addEventListener("input", updateEstimatedTotal);
+  document.getElementById("f-venue-fee").addEventListener("input", updateEstimatedTotal);
+  document.getElementById("f-duration").addEventListener("change", updateEstimatedTotal);
+  document.getElementById("f-total-sessions").addEventListener("input", updateEstimatedTotal);
 });
