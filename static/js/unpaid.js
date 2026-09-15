@@ -90,6 +90,7 @@ function renderAdjustments(adjustments) {
         <td>
           <button data-action="save-adjustment" data-id="${a.id}">儲存</button>
           <button data-action="cancel-edit-adjustment" class="secondary">取消</button>
+          <button data-action="delete-adjustment" class="danger" data-id="${a.id}">刪除</button>
         </td>
       `;
     } else {
@@ -141,6 +142,9 @@ async function handleClick(e) {
         amount,
         note: document.getElementById("edit-adj-note").value.trim() || null,
       });
+    } else if (btn.dataset.action === "delete-adjustment") {
+      if (!confirm("確定要刪除這筆差額紀錄嗎？")) return;
+      await api.delete(`/api/adjustments/${id}`);
     } else {
       return;
     }
