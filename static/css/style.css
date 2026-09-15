@@ -166,17 +166,19 @@ button.status-paid {
   margin-top: 16px;
 }
 
-/* FullCalendar 事件色塊 */
+/* FullCalendar 事件色塊：顏色要夠深，週檢視的細長格子才看得清楚 */
 .fc-event.status-unpaid {
-  background: #f4b350;
-  border-color: #f4b350;
-  color: #3a2b00;
+  background: #f0a030;
+  border-color: #c97f1e;
+  color: #3a2400;
+  font-weight: 600;
 }
 
 .fc-event.status-paid {
-  background: #b6e3c6;
-  border-color: #b6e3c6;
-  color: #1b4d2e;
+  background: #6cc194;
+  border-color: #4a9e72;
+  color: #0f3d22;
+  font-weight: 600;
 }
 
 /* 行事曆色塊圖例 */
@@ -204,11 +206,11 @@ button.status-paid {
 }
 
 .legend-dot.status-unpaid {
-  background: #f4b350;
+  background: #f0a030;
 }
 
 .legend-dot.status-paid {
-  background: #b6e3c6;
+  background: #6cc194;
 }
 
 .legend-dot.status-cancelled {
