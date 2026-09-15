@@ -14,6 +14,7 @@ let isEditMode = false;
 let selectedDates = []; // 新增套組時手動選的上課日期（YYYY-MM-DD 字串）
 let pickerViewYear = null; // 上課日期月曆目前顯示的年份
 let pickerViewMonth = null; // 上課日期月曆目前顯示的月份（0-11）
+let scheduleMode = "dates"; // 新增套組時的上課日期安排方式："dates"=已排定日期／"adhoc"=臨時約時間
 
 function populateSelect(id, items, labelFn) {
   const select = document.getElementById(id);
@@ -168,14 +169,25 @@ function handlePickerGridClick(e) {
   toggleDate(btn.dataset.date);
 }
 
+// 新增套組時切換「已排定日期」／「臨時約時間」，控制欄位顯示與 required
+function updateScheduleModeVisibility() {
+  const adhoc = !isEditMode && scheduleMode === "adhoc";
+  document.getElementById("row-session-dates").style.display =
+    !isEditMode && scheduleMode === "dates" ? "" : "none";
+  document.getElementById("row-total-sessions").style.display = isEditMode || adhoc ? "" : "none";
+  document.getElementById("f-total-sessions").required = isEditMode || adhoc;
+  updateEstimatedTotal();
+}
+
 // 預估總金額 = (堂課費+場地費)/小時 × 標準時長(小時) × 堂數，僅供表單即時預覽
 function updateEstimatedTotal() {
   const coachFee = parseFloat(document.getElementById("f-coach-fee").value) || 0;
   const venueFee = parseFloat(document.getElementById("f-venue-fee").value) || 0;
   const duration = parseInt(document.getElementById("f-duration").value, 10) || 0;
-  const sessions = isEditMode
-    ? parseInt(document.getElementById("f-total-sessions").value, 10) || 0
-    : selectedDates.length;
+  const sessions =
+    isEditMode || scheduleMode === "adhoc"
+      ? parseInt(document.getElementById("f-total-sessions").value, 10) || 0
+      : selectedDates.length;
   const perSession = Math.round((coachFee + venueFee) * (duration / 60) * 100) / 100;
   const total = Math.round(perSession * sessions * 100) / 100;
   document.getElementById("per-session-display").textContent = perSession;
@@ -226,11 +238,9 @@ function openModal(pkg) {
   document.getElementById("f-student").disabled = isEditMode;
   document.getElementById("row-payment").style.display = isEditMode ? "none" : "";
   document.getElementById("edit-note").style.display = isEditMode ? "" : "none";
-  document.getElementById("row-total-sessions").style.display = isEditMode ? "" : "none";
   document.getElementById("row-start-date").style.display = isEditMode ? "" : "none";
-  document.getElementById("row-session-dates").style.display = isEditMode ? "none" : "";
+  document.getElementById("row-schedule-mode").style.display = isEditMode ? "none" : "";
   // 隱藏的欄位不能保留 required，否則 Chrome 仍會擋下表單送出
-  document.getElementById("f-total-sessions").required = isEditMode;
   document.getElementById("f-start-date").required = isEditMode;
 
   document.getElementById("f-student").value = pkg ? pkg.student_id : students[0]?.id ?? "";
@@ -249,11 +259,14 @@ function openModal(pkg) {
     updateWeekdayHint();
   } else {
     selectedDates = [];
+    document.getElementById("f-total-sessions").value = 8;
     document.getElementById("f-quick-start").value = "";
     document.getElementById("f-quick-interval").value = 7;
     document.getElementById("f-quick-count").value = 8;
     const today = new Date();
     setPickerView(today.getFullYear(), today.getMonth());
+    scheduleMode = "dates";
+    document.getElementById("mode-dates").checked = true;
     renderDateList();
   }
 
@@ -263,7 +276,7 @@ function openModal(pkg) {
     pkg ? pkg.recur_start_time.slice(0, 5) : "18:00"
   );
   document.getElementById("f-payment").value = "unpaid";
-  updateEstimatedTotal();
+  updateScheduleModeVisibility();
   document.getElementById("package-modal").classList.add("open");
 }
 
@@ -302,6 +315,18 @@ async function handleSave(e) {
         total_sessions: totalSessions,
         start_date: startDate,
         recur_weekday: weekdayOfDate(startDate),
+      });
+    } else if (scheduleMode === "adhoc") {
+      const totalSessions = parseInt(document.getElementById("f-total-sessions").value, 10);
+      if (!totalSessions || totalSessions < 1) {
+        alert("請填寫預購堂數");
+        return;
+      }
+      await api.post("/api/packages", {
+        ...basePayload,
+        total_sessions: totalSessions,
+        student_id: parseInt(document.getElementById("f-student").value, 10),
+        payment_status: document.getElementById("f-payment").value,
       });
     } else {
       if (selectedDates.length === 0) {
@@ -482,4 +507,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("picker-prev").addEventListener("click", () => shiftPickerMonth(-1));
   document.getElementById("picker-next").addEventListener("click", () => shiftPickerMonth(1));
   document.getElementById("picker-grid").addEventListener("click", handlePickerGridClick);
+  document.querySelectorAll('input[name="schedule-mode"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      scheduleMode = e.target.value;
+      updateScheduleModeVisibility();
+    });
+  });
 });

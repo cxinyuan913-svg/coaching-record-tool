@@ -57,8 +57,11 @@ def recompute_package_pricing(db: Session, package: models.Package) -> None:
     """依「堂課費／場地費（每小時）」費率與各堂實際時長，重新算出每堂金額與套組總價。
 
     每堂互不影響：堂課費 = coach_fee_per_hour × 時長(小時)，場地費 = venue_fee_per_hour × 時長(小時)。
-    某堂時長變長只會讓那一堂變貴，不會動到其他堂。price_per_session／total_price 為依標準時長／
-    目前所有非請假堂加總算出的參考值，供畫面顯示「這堂大概多少錢」「總共要收多少」用。
+    某堂時長變長只會讓那一堂變貴，不會動到其他堂。price_per_session 為標準時長算出的參考值。
+
+    total_price 以「標準單堂金額 × 總堂數」為基準（代表已預收的總金額），再加上每一堂
+    實際時長與標準時長的差額；這樣「臨時約時間」套組在還沒排滿堂數之前，總金額也會正確顯示
+    完整預收金額，而不是只算目前已排的幾堂。
     """
     lessons = (
         db.query(models.Lesson)
@@ -74,9 +77,28 @@ def recompute_package_pricing(db: Session, package: models.Package) -> None:
     package.price_per_session = round(
         (package.coach_fee_per_hour + package.venue_fee_per_hour) * standard_hours, 2
     )
-    package.total_price = round(
-        sum(lesson.revenue_amount + lesson.venue_fee_amount for lesson in lessons), 2
+    duration_diff = sum(
+        (lesson.revenue_amount + lesson.venue_fee_amount) - package.price_per_session
+        for lesson in lessons
+        if lesson.duration != package.session_duration
     )
+    package.total_price = round(
+        package.price_per_session * package.total_sessions + duration_diff, 2
+    )
+
+
+def count_booked_sessions(package: models.Package) -> int:
+    """已佔用套組額度的堂數：只要掛在這個套組上且沒被取消，不論排定或完成都算佔用。"""
+    return sum(
+        1
+        for lesson in package.lessons
+        if lesson.deduct_session and lesson.status != LessonStatus.CANCELLED
+    )
+
+
+def available_sessions(package: models.Package) -> int:
+    """尚可在行事曆上新增、掛回此套組的堂數（總堂數－目前已佔用額度）。"""
+    return max(package.total_sessions - count_booked_sessions(package), 0)
 
 
 def mark_leave_and_reschedule(
