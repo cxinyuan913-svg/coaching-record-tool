@@ -13,11 +13,16 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+let currentAdjustments = [];
+let editingAdjustmentId = null;
+
 async function loadUnpaid() {
   const data = await api.get("/api/stats/unpaid");
   renderLessons(data.unpaid_lessons);
   renderPackages(data.unpaid_packages);
-  renderAdjustments(data.unsettled_adjustments);
+  currentAdjustments = data.unsettled_adjustments;
+  editingAdjustmentId = null;
+  renderAdjustments(currentAdjustments);
 }
 
 function renderLessons(lessons) {
@@ -69,14 +74,37 @@ function renderAdjustments(adjustments) {
   }
   adjustments.forEach((a) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(a.student_name)}</td>
-      <td>${a.lesson_date}</td>
-      <td>${ADJ_TYPE_LABEL[a.type] || a.type}</td>
-      <td>${a.amount}</td>
-      <td>${escapeHtml(a.note || "")}</td>
-      <td><button data-action="settle-adjustment" data-id="${a.id}">標記結清</button></td>
-    `;
+    if (a.id === editingAdjustmentId) {
+      const typeOptions = Object.entries(ADJ_TYPE_LABEL)
+        .map(
+          ([value, label]) =>
+            `<option value="${value}" ${value === a.type ? "selected" : ""}>${label}</option>`
+        )
+        .join("");
+      tr.innerHTML = `
+        <td>${escapeHtml(a.student_name)}</td>
+        <td>${a.lesson_date}</td>
+        <td><select id="edit-adj-type">${typeOptions}</select></td>
+        <td><input id="edit-adj-amount" type="number" min="0" step="1" value="${a.amount}" /></td>
+        <td><input id="edit-adj-note" type="text" value="${escapeHtml(a.note || "")}" /></td>
+        <td>
+          <button data-action="save-adjustment" data-id="${a.id}">儲存</button>
+          <button data-action="cancel-edit-adjustment" class="secondary">取消</button>
+        </td>
+      `;
+    } else {
+      tr.innerHTML = `
+        <td>${escapeHtml(a.student_name)}</td>
+        <td>${a.lesson_date}</td>
+        <td>${ADJ_TYPE_LABEL[a.type] || a.type}</td>
+        <td>${a.amount}</td>
+        <td>${escapeHtml(a.note || "")}</td>
+        <td>
+          <button data-action="edit-adjustment" class="secondary" data-id="${a.id}">編輯</button>
+          <button data-action="settle-adjustment" data-id="${a.id}">標記結清</button>
+        </td>
+      `;
+    }
     tbody.appendChild(tr);
   });
 }
@@ -85,6 +113,16 @@ async function handleClick(e) {
   const btn = e.target.closest("button");
   if (!btn) return;
   const id = btn.dataset.id;
+  if (btn.dataset.action === "edit-adjustment") {
+    editingAdjustmentId = parseInt(id, 10);
+    renderAdjustments(currentAdjustments);
+    return;
+  }
+  if (btn.dataset.action === "cancel-edit-adjustment") {
+    editingAdjustmentId = null;
+    renderAdjustments(currentAdjustments);
+    return;
+  }
   try {
     if (btn.dataset.action === "pay-lesson") {
       await api.patch(`/api/lessons/${id}/payment`, { payment_status: "paid" });
@@ -92,6 +130,17 @@ async function handleClick(e) {
       await api.patch(`/api/packages/${id}/payment`, { payment_status: "paid" });
     } else if (btn.dataset.action === "settle-adjustment") {
       await api.patch(`/api/adjustments/${id}/settle`, {});
+    } else if (btn.dataset.action === "save-adjustment") {
+      const amount = parseFloat(document.getElementById("edit-adj-amount").value);
+      if (Number.isNaN(amount)) {
+        alert("請輸入金額");
+        return;
+      }
+      await api.put(`/api/adjustments/${id}`, {
+        type: document.getElementById("edit-adj-type").value,
+        amount,
+        note: document.getElementById("edit-adj-note").value.trim() || null,
+      });
     } else {
       return;
     }

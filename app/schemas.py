@@ -218,6 +218,14 @@ class AdjustmentCreate(AdjustmentBase):
     pass
 
 
+class AdjustmentUpdate(BaseModel):
+    """編輯既有差額記錄用；不含 lesson_id/package_id（歸屬不可改）與 settled（結清走專屬端點）。"""
+
+    type: AdjustmentType
+    amount: float
+    note: str | None = None
+
+
 class AdjustmentOut(AdjustmentBase):
     model_config = ConfigDict(from_attributes=True)
 
