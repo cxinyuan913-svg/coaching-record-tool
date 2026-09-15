@@ -12,6 +12,7 @@ from app.package_logic import (
     generate_package_lessons,
     recompute_package_pricing,
     recompute_remaining_sessions,
+    remaining_sessions,
 )
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
@@ -25,7 +26,7 @@ def _to_out(package: models.Package) -> schemas.PackageOut:
         name=package.name,
         session_duration=package.session_duration,
         total_sessions=package.total_sessions,
-        remaining_sessions=package.remaining_sessions,
+        remaining_sessions=remaining_sessions(package),
         available_sessions=available_sessions(package),
         coach_fee_per_hour=package.coach_fee_per_hour,
         venue_fee_per_hour=package.venue_fee_per_hour,

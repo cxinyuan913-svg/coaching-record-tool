@@ -1,4 +1,5 @@
 """套組批次排課、剩餘堂數重算、請假順延邏輯（見 SPEC.md 套組批次排課／請假順延）。"""
+from datetime import date as date_type
 from datetime import timedelta
 
 from fastapi import HTTPException
@@ -35,18 +36,24 @@ def generate_package_lessons(db: Session, package: models.Package, dates: list) 
         db.add(lesson)
 
 
+def _is_used_up(lesson: models.Lesson) -> bool:
+    """這堂是否已經算「用掉」：完成／取消，或上課日期已經過了（不用每堂手動標記完成才會扣）。"""
+    if not lesson.deduct_session:
+        return False
+    if lesson.status in (LessonStatus.COMPLETED, LessonStatus.CANCELLED):
+        return True
+    return lesson.date < date_type.today()
+
+
+def remaining_sessions(package: models.Package) -> int:
+    """剩餘堂數 = 總堂數 − 已用掉的堂數，即時依目前日期計算，不吃上次寫入的舊值。"""
+    used = sum(1 for lesson in package.lessons if _is_used_up(lesson))
+    return max(package.total_sessions - used, 0)
+
+
 def recompute_remaining_sessions(db: Session, package: models.Package) -> None:
-    """剩餘堂數 = 總堂數 − 已扣堂（完成或取消且 deduct_session=True）的堂數。"""
-    used = (
-        db.query(models.Lesson)
-        .filter(
-            models.Lesson.package_id == package.id,
-            models.Lesson.deduct_session.is_(True),
-            models.Lesson.status.in_([LessonStatus.COMPLETED, LessonStatus.CANCELLED]),
-        )
-        .count()
-    )
-    package.remaining_sessions = max(package.total_sessions - used, 0)
+    """把即時算出的剩餘堂數寫回欄位，並依此連動套組進行中／已完成狀態。"""
+    package.remaining_sessions = remaining_sessions(package)
     if package.remaining_sessions == 0 and package.status == PackageStatus.ACTIVE:
         package.status = PackageStatus.COMPLETED
     elif package.remaining_sessions > 0 and package.status == PackageStatus.COMPLETED:
