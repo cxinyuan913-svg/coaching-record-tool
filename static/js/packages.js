@@ -196,10 +196,17 @@ function updateEstimatedTotal() {
 }
 
 async function loadPackages() {
-  const packages = await api.get("/api/packages");
+  const [packages, unsettled] = await Promise.all([
+    api.get("/api/packages"),
+    api.get("/api/adjustments?settled=false"),
+  ]);
+  const unsettledPackageIds = new Set(unsettled.map((a) => a.package_id));
+
   const tbody = document.getElementById("package-list");
   tbody.innerHTML = "";
   packages.forEach((p) => {
+    const paymentClass = p.payment_status === "paid" ? "status-paid" : "status-unpaid";
+    const settlementClass = unsettledPackageIds.has(p.id) ? "status-unpaid" : "secondary";
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(p.student_name)}</td>
@@ -209,14 +216,14 @@ async function loadPackages() {
       <td>${p.price_per_session}</td>
       <td>${STATUS_LABEL[p.status] || p.status}</td>
       <td>
-        <button class="secondary" data-action="toggle-payment" data-id="${p.id}" data-current="${p.payment_status}">
+        <button class="${paymentClass}" data-action="toggle-payment" data-id="${p.id}" data-current="${p.payment_status}">
           ${p.payment_status === "paid" ? "已收款" : "未收款"}
         </button>
       </td>
       <td>
         <button class="secondary" data-action="edit" data-id="${p.id}">編輯</button>
         <button class="secondary" data-action="message" data-id="${p.id}">課程訊息</button>
-        <button class="secondary" data-action="settlement" data-id="${p.id}">結算單</button>
+        <button class="${settlementClass}" data-action="settlement" data-id="${p.id}">結算單</button>
         <button class="danger" data-action="delete" data-id="${p.id}">刪除</button>
       </td>
     `;
