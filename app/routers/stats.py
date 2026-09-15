@@ -62,6 +62,77 @@ def revenue_stats(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/by_student", response_model=list[schemas.StudentRevenueItem])
+def revenue_by_student(db: Session = Depends(get_db)):
+    """依學生彙總已收款教練費 + 已結清差額，供視覺化每位學生的總學費使用。"""
+    totals: dict[int, float] = {}
+
+    lesson_rows = (
+        db.query(models.Lesson.student_id, func.sum(models.Lesson.revenue_amount))
+        .filter(models.Lesson.payment_status == PaymentStatus.PAID)
+        .group_by(models.Lesson.student_id)
+        .all()
+    )
+    for student_id, amount in lesson_rows:
+        totals[student_id] = totals.get(student_id, 0) + (amount or 0)
+
+    adj_rows = (
+        db.query(models.Lesson.student_id, func.sum(models.Adjustment.amount))
+        .join(models.Adjustment, models.Adjustment.lesson_id == models.Lesson.id)
+        .filter(models.Adjustment.settled.is_(True))
+        .group_by(models.Lesson.student_id)
+        .all()
+    )
+    for student_id, amount in adj_rows:
+        totals[student_id] = totals.get(student_id, 0) + (amount or 0)
+
+    if not totals:
+        return []
+    students = db.query(models.Student).filter(models.Student.id.in_(totals.keys())).all()
+    name_map = {s.id: s.name for s in students}
+    result = [
+        schemas.StudentRevenueItem(
+            student_id=sid, student_name=name_map.get(sid, "?"), total_revenue=round(amount, 2)
+        )
+        for sid, amount in totals.items()
+    ]
+    result.sort(key=lambda r: -r.total_revenue)
+    return result
+
+
+@router.get("/by_month", response_model=list[schemas.MonthRevenueItem])
+def revenue_by_month(db: Session = Depends(get_db)):
+    """依月份彙總已收款教練費 + 已結清差額，供視覺化每月學費使用。"""
+    totals: dict[str, float] = {}
+
+    lesson_rows = (
+        db.query(func.strftime("%Y-%m", models.Lesson.date), func.sum(models.Lesson.revenue_amount))
+        .filter(models.Lesson.payment_status == PaymentStatus.PAID)
+        .group_by(func.strftime("%Y-%m", models.Lesson.date))
+        .all()
+    )
+    for month, amount in lesson_rows:
+        totals[month] = totals.get(month, 0) + (amount or 0)
+
+    adj_rows = (
+        db.query(
+            func.strftime("%Y-%m", models.Adjustment.settled_at), func.sum(models.Adjustment.amount)
+        )
+        .filter(models.Adjustment.settled.is_(True))
+        .group_by(func.strftime("%Y-%m", models.Adjustment.settled_at))
+        .all()
+    )
+    for month, amount in adj_rows:
+        if month is None:
+            continue
+        totals[month] = totals.get(month, 0) + (amount or 0)
+
+    return [
+        schemas.MonthRevenueItem(month=month, total_revenue=round(amount, 2))
+        for month, amount in sorted(totals.items())
+    ]
+
+
 @router.get("/unpaid", response_model=schemas.UnpaidSummary)
 def unpaid_summary(db: Session = Depends(get_db)):
     from app.routers.lessons import _to_out as lesson_to_out

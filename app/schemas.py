@@ -247,3 +247,14 @@ class BookingCheckSummary(BaseModel):
 class PackageSettlement(BaseModel):
     adjustments: list[AdjustmentOut]
     total: float
+
+
+class StudentRevenueItem(BaseModel):
+    student_id: int
+    student_name: str
+    total_revenue: float
+
+
+class MonthRevenueItem(BaseModel):
+    month: str  # "YYYY-MM"
+    total_revenue: float
