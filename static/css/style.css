@@ -191,11 +191,19 @@ button.status-paid {
 
 .fc-timegrid-event.status-unpaid {
   background: #fbe0b0;
-  color: #6b4400;
 }
 
 .fc-timegrid-event.status-paid {
   background: #cdeedb;
+}
+
+/* FullCalendar 內層的 .fc-event-main 有自己更明確的白字規則，蓋掉外層 color，
+   要直接指定內層文字顏色才會生效 */
+.fc-timegrid-event.status-unpaid .fc-event-main {
+  color: #6b4400;
+}
+
+.fc-timegrid-event.status-paid .fc-event-main {
   color: #123b25;
 }
 
