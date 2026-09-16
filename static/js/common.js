@@ -134,3 +134,16 @@ function highlightActiveNav() {
 }
 
 document.addEventListener("DOMContentLoaded", highlightActiveNav);
+
+// 數字輸入框聚焦時，滑鼠滾輪滾動頁面會被瀏覽器當成「調整數值」，容易滑到
+// 一半不小心把金額改掉（例如輸入 500 捲動頁面變成 498）；滾動時讓數字
+// 欄位失焦，滾輪就只會滾頁面，不會再改到數值
+document.addEventListener(
+  "wheel",
+  () => {
+    if (document.activeElement && document.activeElement.type === "number") {
+      document.activeElement.blur();
+    }
+  },
+  { passive: true }
+);
