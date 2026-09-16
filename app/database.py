@@ -1,8 +1,11 @@
 """資料庫連線設定：SQLite engine 與 session。"""
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./coaching.db"
+# 可用環境變數覆寫，測試時指向獨立的暫存資料庫，不會動到真實的 coaching.db
+SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./coaching.db")
 
 # SQLite 須加 check_same_thread=False 才能在 FastAPI 多執行緒下使用
 engine = create_engine(
