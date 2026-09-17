@@ -8,3 +8,5 @@ __pycache__/
 .vscode/
 .idea/
 .scratch/
+booking_api_token.txt
+

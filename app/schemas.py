@@ -1,7 +1,7 @@
 """Pydantic schemas：API 輸入輸出格式。"""
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import AdjustmentType, BookingStatus, LessonStatus, PackageStatus, PaymentStatus, Tier
 
@@ -271,3 +271,28 @@ class StudentRevenueItem(BaseModel):
 class MonthRevenueItem(BaseModel):
     month: str  # "YYYY-MM"
     total_revenue: float
+
+
+class VenueScheduleLesson(BaseModel):
+    """給外部訂場自動化系統用的單筆課程資料。所有時間欄位皆為台灣當地時間
+    （UTC+8），不含時區轉換，字串本身沒有時區後綴。"""
+
+    lesson_id: int
+    date: date
+    start_time: time
+    end_time: time
+    student_name: str
+    status: LessonStatus
+    booking_status: BookingStatus
+    booked_at: datetime | None
+
+
+class VenueScheduleOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    venue: str
+    venue_id: int
+    from_: date = Field(alias="from")
+    to: date
+    generated_at: datetime
+    lessons: list[VenueScheduleLesson]
