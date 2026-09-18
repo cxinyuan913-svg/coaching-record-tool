@@ -34,11 +34,16 @@ function renderLessons(lessons) {
   }
   lessons.forEach((l) => {
     const tr = document.createElement("tr");
+    const total = l.revenue_amount + l.venue_fee_amount;
+    const amountText =
+      l.venue_fee_amount > 0
+        ? `${total}（教練費 ${l.revenue_amount} + 場地費 ${l.venue_fee_amount}）`
+        : `${total}`;
     tr.innerHTML = `
       <td>${l.date} ${l.start_time.slice(0, 5)}</td>
       <td>${escapeHtml(l.student_name)}</td>
       <td>${escapeHtml(l.venue_name)}</td>
-      <td>${l.revenue_amount}</td>
+      <td>${amountText}</td>
       <td><button data-action="pay-lesson" data-id="${l.id}">標記已收款</button></td>
     `;
     tbody.appendChild(tr);
