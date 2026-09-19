@@ -1,0 +1,18 @@
+# 見 spec/deployment.md 階段一：用 restart: unless-stopped 讓 Docker
+# 自己負責「容器意外結束就重開」，取代原本的 Windows 工作排程器
+# （CoachingRecordToolServer）——不需要先登入 Windows 才會觸發，也不
+# 受任何對話環境的資源狀況影響。
+services:
+  coaching-record-tool:
+    build: .
+    container_name: coaching-record-tool
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # 這四個檔案要在容器重建之間保留狀態，掛載前必須已經存在於本機，
+      # 否則 Docker 會把它們誤判成資料夾建立，導致啟動失敗或寫入錯位置
+      - ./coaching.db:/app/coaching.db
+      - ./booking_api_token.txt:/app/booking_api_token.txt
+      - ./discord_webhook_url.txt:/app/discord_webhook_url.txt
+      - ./scheduler_state.json:/app/scheduler_state.json

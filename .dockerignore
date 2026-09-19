@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.py[cod]
+.git/
+.scratch/
+tests/
+.pytest_cache/
+requirements-dev.txt
+*.db
+*.sqlite3
+booking_api_token.txt
+discord_webhook_url.txt
+scheduler_state.json
+.env
+.vscode/
+.idea/
