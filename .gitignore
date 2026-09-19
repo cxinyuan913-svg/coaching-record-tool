@@ -9,4 +9,6 @@ __pycache__/
 .idea/
 .scratch/
 booking_api_token.txt
+discord_webhook_url.txt
+scheduler_state.json
 

@@ -38,11 +38,19 @@ flowchart TD
     end
 
     subgraph API["FastAPI 應用（app/main.py）"]
-        Routers["8 個 router 模組<br/>students / venues / price_rules /<br/>packages / lessons / adjustments /<br/>stats / booking"]
+        Routers["9 個 router 模組<br/>students / venues / price_rules /<br/>packages / lessons / adjustments /<br/>stats / booking / integrations"]
+        Auth["auth.py<br/>（Bearer Token 驗證，只套用在 integrations）"]
         Logic["業務邏輯層<br/>package_logic.py（套組計算）<br/>pricing.py（單堂計價）"]
         Schemas["schemas.py<br/>（Pydantic 輸入輸出驗證）"]
         Routers --> Logic
         Routers --> Schemas
+        Auth -.驗證.-> Routers
+    end
+
+    subgraph BG["背景排程（app/scheduler.py，獨立執行緒）"]
+        Scheduler["每分鐘檢查一次：<br/>上課前提醒／套組結束提醒／未收款提醒"]
+        Notify["notifications.py<br/>（Discord Webhook 發送）"]
+        Scheduler --> Notify
     end
 
     subgraph DB["資料層"]
@@ -51,9 +59,17 @@ flowchart TD
         ORM --> SQLite
     end
 
+    subgraph External["外部系統"]
+        BookingBot["動智館自動訂場系統<br/>（另一套獨立的瀏覽器自動化程式）"]
+        Discord["Discord（手機推播）"]
+    end
+
     JS -- "fetch('/api/...')<br/>JSON" --> Routers
     Logic --> ORM
     Routers --> ORM
+    Scheduler --> ORM
+    Notify -- "webhook POST" --> Discord
+    BookingBot -- "GET .../venue-schedule<br/>Bearer Token" --> Routers
 ```
 
 **分層原則**：路由層（`routers/*.py`）只負責「收請求、找資料、呼叫邏輯、
@@ -144,6 +160,7 @@ erDiagram
         int default_venue_id FK
         enum status "active/completed/expired"
         enum payment_status
+        bool ending_reminder_sent "剩7天提醒是否已發送，防重複通知"
     }
     LESSONS {
         int id PK
@@ -162,6 +179,7 @@ erDiagram
         enum payment_status
         float revenue_amount
         float venue_fee_amount
+        bool hour_reminder_sent "上課前一小時提醒是否已發送，防重複通知"
     }
     ADJUSTMENTS {
         int id PK
@@ -180,6 +198,12 @@ erDiagram
 修正）。`available_sessions` 則完全是計算欄位，資料庫裡沒有對應的實體
 欄位。
 
+`hour_reminder_sent`／`ending_reminder_sent` 剛好是相反的設計：這兩個
+**必須**存成欄位、不能即時計算，因為它們的用途就是「記住這件事有沒有
+發生過」（發過的通知不能因為重新整理一次就忘記、又發第二次），跟
+`remaining_sessions` 那種「每次都該用當下狀態重算」的欄位目的不同，不
+是同一個規則的例外。
+
 ---
 
 ## 5. 模組職責一覽
@@ -188,10 +212,13 @@ erDiagram
 
 | 檔案 | 職責 |
 |---|---|
-| `main.py` | FastAPI 進入點：建表、掛路由、掛靜態檔案 |
-| `database.py` | SQLite 連線、session 工廠設定 |
+| `main.py` | FastAPI 進入點：建表、補欄位遷移、掛路由、掛靜態檔案、啟動背景排程 |
+| `database.py` | SQLite 連線、session 工廠設定、輕量欄位遷移（`ensure_schema_migrations`） |
 | `models.py` | 六張表的 ORM 定義與關聯 |
 | `schemas.py` | 所有 API 的請求/回應格式（Pydantic） |
+| `auth.py` | 給外部自動化系統用的 Bearer Token 驗證，只套用在 `integrations` router |
+| `notifications.py` | 發送 Discord Webhook 通知（純 stdlib，沒有額外依賴） |
+| `scheduler.py` | 背景執行緒：每分鐘檢查上課提醒／套組結束提醒／未收款提醒三件事 |
 | `pricing.py` | 單堂制查價目表計價（含 3 人以上朋友價退回熟客價的例外） |
 | `package_logic.py` | 套組相關的所有計算邏輯：批次產生課程、剩餘堂數／狀態即時計算、金額分攤重算、請假順延、人數差額試算 |
 | `seed.py` | 啟動時寫入預設價目表資料（若不存在） |
@@ -203,6 +230,7 @@ erDiagram
 | `routers/adjustments.py` | 額外費用 CRUD、結清狀態切換 |
 | `routers/stats.py` | 收入統計（週/月/年/依學生/依月份）、未收款清單彙整 |
 | `routers/booking.py` | 訂場檢查三分區邏輯、標記已訂 |
+| `routers/integrations.py` | 給外部訂場自動化系統查詢課表的唯讀端點（`GET /venue-schedule`），需要 Bearer Token |
 
 ### 前端（`static/js/`）
 
@@ -237,7 +265,7 @@ erDiagram
 |---|---|
 | 「扣堂數」欄位在編輯課程並將狀態改為請假／取消時應該出現，讓使用者手動決定要不要扣 | 這個 UI 欄位沒有被實作，取消/請假的扣堂邏輯是寫死在後端的（請假一律不扣、另外產生補課；取消目前沒有特殊處理） |
 | 套組狀態有 `expired`（已過期） | 系統從未在任何地方把套組設成這個狀態，是個沒有使用到的欄位 |
-| 結算單「累積到包上完（`remaining_sessions=0`）才彙整成結算單」 | 實際上結算端點沒有這個門檻，任何時候只要有未結清的額外費用都可以結算，不需要等套組全部上完 |
+| 結算單「累積到包上完（`remaining_sessions=0`）才彙整成結算單」 | 實際上結算端點沒有這個門檻，任何時候只要有未結清的額外費用都可以結算，不需要等套組全部上完（但背景提醒系統的「未結算差額」通知有套用這個門檻：掛在套組上的差額要等 `remaining_sessions=0` 才會提醒，跟結算端點本身是否有門檻是兩回事，見 `scheduler.py`） |
 
 ### C. 實際做出來、但規格完全沒提到的功能
 
@@ -251,6 +279,8 @@ erDiagram
 - 課程套組列表的未收款／未結清差額顯眼顏色標示
 - 學生列表依「是否有進行中套組」排序
 - 數字輸入框防止滑鼠滾輪誤改金額
+- 給外部訂場自動化系統用的資料介接 API（`/api/integrations/venue-schedule`），含獨立的 Bearer Token 驗證機制
+- 背景排程系統：上課前一小時、套組剩 7 天、逾期未收款/未結算三種 Discord 通知
 
 ---
 

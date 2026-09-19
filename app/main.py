@@ -1,10 +1,13 @@
 """FastAPI 進入點。"""
+import os
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app import models  # noqa: F401  匯入以註冊 ORM models 到 Base.metadata
-from app.database import Base, SessionLocal, engine
+from app import scheduler
+from app.database import Base, SessionLocal, engine, ensure_schema_migrations
 from app.routers import (
     adjustments,
     booking,
@@ -20,6 +23,8 @@ from app.seed import seed_price_rules
 
 # 六張表一次建齊
 Base.metadata.create_all(bind=engine)
+# 既有的 coaching.db 建表時間早於新欄位加入的時間，補上缺少的欄位
+ensure_schema_migrations()
 
 with SessionLocal() as db:
     seed_price_rules(db)
@@ -35,6 +40,11 @@ app.include_router(stats.router)
 app.include_router(booking.router)
 app.include_router(adjustments.router)
 app.include_router(integrations.router)
+
+# 測試會把 DATABASE_URL 指向暫存資料庫，此時不啟動背景排程，避免跟測試的
+# drop_all/create_all 互相干擾，也避免測試過程真的打出 Discord 通知
+if "DATABASE_URL" not in os.environ:
+    scheduler.start_scheduler()
 
 
 @app.get("/api/health")

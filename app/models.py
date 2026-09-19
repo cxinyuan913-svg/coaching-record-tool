@@ -123,6 +123,8 @@ class Package(Base):
         Enum(PaymentStatus), nullable=False, default=PaymentStatus.UNPAID
     )
     payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 「最後一堂課剩7天」提醒是否已發送過，避免每次排程檢查都重複通知
+    ending_reminder_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     student: Mapped["Student"] = relationship(back_populates="packages")
     default_venue: Mapped["Venue"] = relationship(back_populates="packages")
@@ -159,6 +161,8 @@ class Lesson(Base):
     revenue_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     # 場地費：代收代付給場館的費用，不算教練收入，不計入收入統計
     venue_fee_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    # 「上課前一小時」提醒是否已發送過，避免每次排程檢查都重複通知
+    hour_reminder_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     student: Mapped["Student"] = relationship(back_populates="lessons")
     venue: Mapped["Venue"] = relationship(back_populates="lessons")

@@ -12,6 +12,7 @@ import pytest
 
 _tmp_dir = tempfile.mkdtemp(prefix="coaching_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_tmp_dir, 'test_coaching.db')}"
+os.environ["SCHEDULER_STATE_FILE"] = os.path.join(_tmp_dir, "scheduler_state.json")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
