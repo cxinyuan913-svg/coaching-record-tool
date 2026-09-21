@@ -107,11 +107,48 @@ docker compose -f docker-compose.cloud.yml up -d --build
 第一次啟動 Caddy 會需要幾十秒到一兩分鐘跟 Let's Encrypt 要憑證，之後
 拿瀏覽器打 `https://你的網域` 應該就能看到行事曆頁面、網址列有鎖頭。
 
-## 步驟八：確認沒問題後，把舊的 Windows 排程退役
+## 步驟八：別忘了動智館自動訂場系統的連線位址也要改
 
-在雲端版本穩定跑過幾天、手機也實際連過確認沒問題之後，才把本機
-Windows 工作排程器（`CoachingRecordToolServer`／`run_server_hidden.vbs`）
-停用——不要一次到位，留一個緩衝期比較保險。
+那套另外獨立在跑的動智館自動訂場系統，是打這個工具的
+`GET /api/integrations/venue-schedule` 來查課表（見 `ARCHITECTURE.md`）。
+它原本設定的網址是本機（例如 `http://127.0.0.1:8000/...` 或區網 IP），
+搬去雲端之後要記得把那套系統的設定改成 `https://你的網域/api/...`，
+**Bearer Token 不用換**——`booking_api_token.txt` 已經跟著步驟六一起
+複製到 VPS 上了，內容是同一組。這步很容易漏掉：漏改的話，那套系統
+會繼續打你本機那台（如果本機 Windows 排程還沒關的話還能動，但看到
+的是本機那份舊資料），或本機一旦關掉之後直接連不上、訂場排程整個
+停擺卻不會有明顯錯誤訊息。
+
+## 步驟九：確認沒問題後，把舊的 Windows 排程退役
+
+在雲端版本穩定跑過幾天、手機也實際連過確認沒問題、動智館那邊也確認
+改連到新網址且正常運作之後，才把本機 Windows 工作排程器
+（`CoachingRecordToolServer`／`run_server_hidden.vbs`）停用——不要一次
+到位，留一個緩衝期比較保險。
+
+---
+
+## 常見問題：容器啟動後一直重開、log 顯示寫入 coaching.db 被拒絕
+
+`Dockerfile` 裡讓容器用一個非 root 的 `appuser` 執行，這在 Windows 上
+用 Docker Desktop 不會有事，但在**真正的 Linux 主機**上，bind mount
+進去的 `coaching.db` 等檔案，權限是看「主機上這個檔案的擁有者」跟
+「容器裡 `appuser` 的 UID」對不對得起來，兩者對不起來的話容器裡的
+程式會沒有寫入權限。`docker compose logs coaching-record-tool` 如果
+看到 `PermissionError` 或 `unable to open database file`，八成就是
+這個問題。兩種修法擇一：
+
+```bash
+# 方法一：把主機上這幾個檔案的擁有者，改成跟容器裡 appuser 的 UID 一致
+# （容器預設是 1000，可以用這行確認）
+docker compose -f docker-compose.cloud.yml exec coaching-record-tool id appuser
+sudo chown 1000:1000 coaching.db booking_api_token.txt discord_webhook_url.txt scheduler_state.json
+
+# 方法二：改用 root 執行（單人小工具、機器只有你在用，風險可接受的話
+# 這樣最省事）——把 Dockerfile 裡 `RUN useradd --create-home appuser` 跟
+# `USER appuser` 這兩行註解掉，改完要重新 build：
+docker compose -f docker-compose.cloud.yml up -d --build
+```
 
 ---
 
