@@ -123,8 +123,9 @@ Windows 工作排程器（`CoachingRecordToolServer`／`run_server_hidden.vbs`�
 ```bash
 # 在 VPS 上，設定每天凌晨 3 點自動備份
 crontab -e
-# 貼上這一行（記得把路徑換成你實際 clone 的位置）
-0 3 * * * /home/coach/coaching-record-tool/scripts/backup_db.sh
+# 貼上這一行（記得把路徑換成你實際 clone 的位置；從 git 上抓下來的
+# .sh 檔預設沒有執行權限，用 sh 開頭執行就不用另外 chmod +x）
+0 3 * * * sh /home/coach/coaching-record-tool/scripts/backup_db.sh
 ```
 
 **這只是「同一台主機上」的備份，防不了這台 VPS 本身整台掛掉或被誤刪
