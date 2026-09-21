@@ -204,3 +204,177 @@ def test_收入統計只加總已收款未取消的課程與已結清的差額(c
     res = client.get("/api/stats/revenue")
     assert res.status_code == 200
     assert res.json()["total"] == 1000 + 500
+
+
+def test_刪除有額外費用的課程不會因為外鍵限制而失敗(client):
+    """驗證行為：一堂課如果掛了額外費用（例如臨時加收），刪除這堂課時要
+    連同底下的額外費用一起刪掉。adjustments.lesson_id 是 NOT NULL，如果
+    刪除課程時沒有先清掉關聯的額外費用，ORM 想把外鍵設成 NULL 會直接違反
+    資料庫限制，讓整個刪除動作失敗（曾經實際發生過的 bug）。"""
+    student = create_student(client)
+    venue = create_venue(client)
+    res = client.post(
+        "/api/lessons",
+        json={
+            "student_id": student["id"],
+            "venue_id": venue["id"],
+            "date": "2026-10-01",
+            "start_time": "18:00:00",
+            "duration": 60,
+            "headcount": 1,
+            "payment_status": "unpaid",
+            "revenue_amount": 1000,
+            "venue_fee_amount": 0,
+        },
+    )
+    lesson_id = res.json()["id"]
+
+    res = client.post(
+        "/api/adjustments",
+        json={"lesson_id": lesson_id, "type": "other", "amount": 200, "note": "臨時加收"},
+    )
+    assert res.status_code == 201
+
+    res = client.delete(f"/api/lessons/{lesson_id}")
+    assert res.status_code == 204, res.text
+
+    assert client.get("/api/adjustments").json() == []
+
+
+def _package_update_payload(package: dict, **overrides) -> dict:
+    payload = {
+        "name": package["name"],
+        "session_duration": package["session_duration"],
+        "total_sessions": package["total_sessions"],
+        "coach_fee_per_hour": package["coach_fee_per_hour"],
+        "venue_fee_per_hour": package["venue_fee_per_hour"],
+        "purchased_date": package["purchased_date"],
+        "start_date": package["start_date"],
+        "recur_weekday": package["recur_weekday"],
+        "recur_start_time": package["recur_start_time"],
+        "default_venue_id": package["default_venue_id"],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_套組總堂數不能改得比已經排定的堂數還少(client):
+    """驗證行為：一個套組如果已經有 3 堂課掛在上面，把 total_sessions 改
+    成比 3 小的數字要被擋下來（400），改成剛好等於已排堂數則允許——避免
+    套組欄位說「只剩 N 堂」，但行事曆上其實還有更多堂沒被算進去的資料
+    不一致（曾經實際發生過的 bug）。"""
+    student = create_student(client)
+    venue = create_venue(client)
+    start = date.today() + timedelta(days=30)
+    dates = [(start + timedelta(weeks=i)).isoformat() for i in range(3)]
+    package = create_package(client, student["id"], venue["id"], dates)
+    assert package["total_sessions"] == 3
+
+    res = client.put(
+        f"/api/packages/{package['id']}",
+        json=_package_update_payload(package, total_sessions=2),
+    )
+    assert res.status_code == 400, res.text
+
+    res = client.put(
+        f"/api/packages/{package['id']}",
+        json=_package_update_payload(package, total_sessions=3),
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_連環請假後復原最早那堂會清掉整條補課鏈(client):
+    """驗證行為：A 請假產生補課 B，B 自己又請假產生補課 C，這時候把最早
+    的 A 復原回正常上課，系統要把整條鏈（B、C）都清掉，不能只看「A 直接
+    補的那一堂」——曾經實際發生過只清到 B 這一層、C 留在資料庫裡造成套
+    組堂數被多佔用的 bug。"""
+    student = create_student(client)
+    venue = create_venue(client)
+    start = date.today() + timedelta(days=60)
+    package = create_package(client, student["id"], venue["id"], [start.isoformat()], total_sessions=1)
+
+    lesson_a = client.get(f"/api/packages/{package['id']}/lessons").json()[0]
+
+    res = client.post(f"/api/lessons/{lesson_a['id']}/leave", json={})
+    assert res.status_code == 200, res.text
+    lesson_b = res.json()["makeup_lesson"]
+
+    res = client.post(f"/api/lessons/{lesson_b['id']}/leave", json={})
+    assert res.status_code == 200, res.text
+    lesson_c = res.json()["makeup_lesson"]
+
+    # 把 A 復原回正常上課
+    res = client.put(
+        f"/api/lessons/{lesson_a['id']}",
+        json={
+            "student_id": lesson_a["student_id"],
+            "venue_id": lesson_a["venue_id"],
+            "date": lesson_a["date"],
+            "start_time": lesson_a["start_time"],
+            "duration": lesson_a["duration"],
+            "headcount": lesson_a["headcount"],
+            "payment_status": lesson_a["payment_status"],
+            "revenue_amount": lesson_a["revenue_amount"],
+            "venue_fee_amount": lesson_a["venue_fee_amount"],
+            "status": "scheduled",
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["deduct_session"] is True
+
+    remaining_ids = {item["id"] for item in client.get(f"/api/packages/{package['id']}/lessons").json()}
+    assert remaining_ids == {lesson_a["id"]}
+    assert client.get(f"/api/lessons/{lesson_b['id']}").status_code == 404
+    assert client.get(f"/api/lessons/{lesson_c['id']}").status_code == 404
+
+
+def test_補課鏈裡有堂已完成時復原請假會被擋下不自動刪除(client):
+    """驗證行為：A 請假產生補課 B，B 已經被標記完成（代表真的上過課、
+    可能也收過錢），這時候如果把 A 復原回正常上課，系統不能自動把 B 刪
+    掉（會憑空消滅一筆已經發生的歷史紀錄），要擋下來（409）讓人工處理。"""
+    student = create_student(client)
+    venue = create_venue(client)
+    start = date.today() + timedelta(days=60)
+    package = create_package(client, student["id"], venue["id"], [start.isoformat()], total_sessions=1)
+
+    lesson_a = client.get(f"/api/packages/{package['id']}/lessons").json()[0]
+
+    res = client.post(f"/api/lessons/{lesson_a['id']}/leave", json={})
+    assert res.status_code == 200, res.text
+    lesson_b = res.json()["makeup_lesson"]
+
+    res = client.put(
+        f"/api/lessons/{lesson_b['id']}",
+        json={
+            "student_id": lesson_b["student_id"],
+            "venue_id": lesson_b["venue_id"],
+            "date": lesson_b["date"],
+            "start_time": lesson_b["start_time"],
+            "duration": lesson_b["duration"],
+            "headcount": lesson_b["headcount"],
+            "payment_status": lesson_b["payment_status"],
+            "revenue_amount": lesson_b["revenue_amount"],
+            "venue_fee_amount": lesson_b["venue_fee_amount"],
+            "status": "completed",
+        },
+    )
+    assert res.status_code == 200, res.text
+
+    res = client.put(
+        f"/api/lessons/{lesson_a['id']}",
+        json={
+            "student_id": lesson_a["student_id"],
+            "venue_id": lesson_a["venue_id"],
+            "date": lesson_a["date"],
+            "start_time": lesson_a["start_time"],
+            "duration": lesson_a["duration"],
+            "headcount": lesson_a["headcount"],
+            "payment_status": lesson_a["payment_status"],
+            "revenue_amount": lesson_a["revenue_amount"],
+            "venue_fee_amount": lesson_a["venue_fee_amount"],
+            "status": "scheduled",
+        },
+    )
+    assert res.status_code == 409, res.text
+
+    assert client.get(f"/api/lessons/{lesson_b['id']}").json()["status"] == "completed"

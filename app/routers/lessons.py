@@ -165,17 +165,34 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
 
     if is_package_lesson:
         if was_leave and lesson.status != LessonStatus.LEAVE:
-            # 復原請假：移除當初順延補的那堂（若尚未上課過），並恢復扣堂
-            makeup = (
-                db.query(models.Lesson)
-                .filter(
-                    models.Lesson.makeup_for_lesson_id == db_lesson.id,
-                    models.Lesson.status == LessonStatus.SCHEDULED,
+            # 復原請假：把這堂請假衍生出去的整條補課鏈都清掉，不能只看直接
+            # 補的那一堂——補課本身也可能又請假、又產生下一層補課。用
+            # makeup_for_lesson_id 一路往下追蹤整條鏈。
+            chain: list[models.Lesson] = []
+            to_visit = [db_lesson.id]
+            while to_visit:
+                current_id = to_visit.pop()
+                children = (
+                    db.query(models.Lesson)
+                    .filter(models.Lesson.makeup_for_lesson_id == current_id)
+                    .all()
                 )
-                .first()
-            )
-            if makeup is not None:
-                db.delete(makeup)
+                for child in children:
+                    chain.append(child)
+                    to_visit.append(child.id)
+
+            # 鏈裡只要有一堂已經標記完成（代表真的上過課、可能也收過錢），
+            # 就不自動處理，擋下來讓人工決定，避免動到已經發生的歷史紀錄
+            if any(m.status == LessonStatus.COMPLETED for m in chain):
+                raise HTTPException(
+                    status_code=409,
+                    detail="這堂請假後順延出去的補課鏈裡，有一堂已經標記完成，"
+                    "無法自動復原，請先手動處理那幾堂補課後再復原這一堂",
+                )
+
+            for makeup in chain:
+                if makeup.status != LessonStatus.CANCELLED:
+                    db.delete(makeup)
             db_lesson.deduct_session = True
 
         # 套組課程的收款狀態一律隨套組；金額依該堂時長占套組總時長的比例重新分攤（見對話紀錄）
@@ -247,6 +264,11 @@ def delete_lesson(lesson_id: int, db: Session = Depends(get_db)):
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="課程不存在")
     package_id = db_lesson.package_id
+    # adjustments.lesson_id 是 NOT NULL，刪除課程前要先刪掉掛在這堂上的額外費用，
+    # 否則 ORM 想把外鍵設成 NULL 時會違反 NOT NULL 限制，讓刪除整個失敗
+    db.query(models.Adjustment).filter(models.Adjustment.lesson_id == lesson_id).delete(
+        synchronize_session=False
+    )
     db.delete(db_lesson)
     if package_id is not None:
         db.flush()  # 確保 recompute 查詢時已經看不到被刪除的這堂

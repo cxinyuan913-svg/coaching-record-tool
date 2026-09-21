@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import LessonStatus, PackageStatus, PaymentStatus
 from app.package_logic import (
     available_sessions,
+    count_booked_sessions,
     generate_package_lessons,
     live_status,
     recompute_package_pricing,
@@ -133,6 +134,13 @@ def update_package(package_id: int, payload: schemas.PackageUpdate, db: Session 
 
     if payload.total_sessions < 1:
         raise HTTPException(status_code=400, detail="total_sessions 必須至少為 1")
+
+    booked = count_booked_sessions(package)
+    if payload.total_sessions < booked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"目前已經有 {booked} 堂課掛在這個套組上，total_sessions 不能改得比這個數字少",
+        )
 
     duration_changed = payload.session_duration != package.session_duration
 
