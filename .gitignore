@@ -12,4 +12,5 @@ booking_api_token.txt
 discord_webhook_url.txt
 scheduler_state.json
 server.log
+backups/
 

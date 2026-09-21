@@ -1,0 +1,6 @@
+# Caddy 反向代理設定：網域指過來之後，Caddy 會自動跟 Let's Encrypt 要一張
+# 憑證、自動續期，不用自己手動管 HTTPS 憑證。{$DOMAIN} 從 .env 檔讀（見
+# .env.example），本機開發用不到這個檔案。
+{$DOMAIN} {
+	reverse_proxy coaching-record-tool:8000
+}

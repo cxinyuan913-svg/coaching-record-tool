@@ -1,0 +1,36 @@
+# 雲端 VPS 用的部署設定（見 spec/cloud_deployment.md）。跟根目錄那份
+# docker-compose.yml（本機 Windows 用，直接開 8000 port）分開，避免混用：
+# 這份不對外開放應用程式本身的 port，對外流量一律先經過 caddy 拿到
+# HTTPS，再轉給裡面的 app。
+#
+# 啟動前先建立 .env（複製 .env.example 改成你自己的網域）。
+services:
+  coaching-record-tool:
+    build: .
+    container_name: coaching-record-tool
+    restart: unless-stopped
+    volumes:
+      - ./coaching.db:/app/coaching.db
+      - ./booking_api_token.txt:/app/booking_api_token.txt
+      - ./discord_webhook_url.txt:/app/discord_webhook_url.txt
+      - ./scheduler_state.json:/app/scheduler_state.json
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: coaching-record-tool-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - coaching-record-tool
+
+volumes:
+  caddy_data:
+  caddy_config:
