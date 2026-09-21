@@ -10,6 +10,8 @@ async function loadStats() {
   document.getElementById("stat-month").textContent = formatMoney(stats.month);
   document.getElementById("stat-year").textContent = formatMoney(stats.year);
   document.getElementById("stat-total").textContent = formatMoney(stats.total);
+  document.getElementById("stat-completed").textContent = formatMoney(stats.completed_total);
+  document.getElementById("stat-uncompleted").textContent = formatMoney(stats.uncompleted_total);
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";

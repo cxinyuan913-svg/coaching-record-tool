@@ -3,7 +3,7 @@ from datetime import date as date_type
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -13,7 +13,12 @@ from app.models import LessonStatus, PackageStatus, PaymentStatus
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
-def _sum_lessons(db: Session, start: date_type | None, end: date_type | None) -> float:
+def _sum_lessons(
+    db: Session, start: date_type | None, end: date_type | None, completed: bool | None = None
+) -> float:
+    """completed=None 不拆分；True 只算「已上完」（狀態已完成，或課程日期已過）；
+    False 只算「已收款但還沒上完」。跟 package_logic._is_used_up 判斷套組堂數
+    用不用掉是同一套「日期過了就算數」的邏輯，維持全站一致。"""
     query = db.query(func.coalesce(func.sum(models.Lesson.revenue_amount), 0)).filter(
         models.Lesson.payment_status == PaymentStatus.PAID,
         models.Lesson.status != LessonStatus.CANCELLED,
@@ -22,6 +27,12 @@ def _sum_lessons(db: Session, start: date_type | None, end: date_type | None) ->
         query = query.filter(models.Lesson.date >= start)
     if end is not None:
         query = query.filter(models.Lesson.date <= end)
+    if completed is not None:
+        is_completed = or_(
+            models.Lesson.status == LessonStatus.COMPLETED,
+            models.Lesson.date < date_type.today(),
+        )
+        query = query.filter(is_completed if completed else ~is_completed)
     return query.scalar()
 
 
@@ -55,11 +66,17 @@ def revenue_stats(db: Session = Depends(get_db)):
     year_start = today.replace(month=1, day=1)
     year_end = today.replace(month=12, day=31)
 
+    # 已上完/未上完只拆總收入（不分週期），已結清的差額一律算已上完（結清代表事情已經發生）
+    completed_total = _sum_lessons(db, None, None, completed=True) + _sum_adjustments(db, None, None)
+    uncompleted_total = _sum_lessons(db, None, None, completed=False)
+
     return schemas.RevenueStats(
         week=_revenue(db, week_start, week_end),
         month=_revenue(db, month_start, month_end),
         year=_revenue(db, year_start, year_end),
         total=_revenue(db, None, None),
+        completed_total=completed_total,
+        uncompleted_total=uncompleted_total,
     )
 
 

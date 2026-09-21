@@ -378,3 +378,142 @@ def test_補課鏈裡有堂已完成時復原請假會被擋下不自動刪除(c
     assert res.status_code == 409, res.text
 
     assert client.get(f"/api/lessons/{lesson_b['id']}").json()["status"] == "completed"
+
+
+def test_同一學生兩個進行中套組堂數各自獨立不會互相扣到(client):
+    """驗證行為：學生 A 手上還有一個舊套組（已排滿、剩最後一堂還沒上），
+    這時候幫他新開一個套組，兩個套組都是「進行中」——新套組加課、扣額度
+    只能動到新套組自己的堂數，完全不該影響舊套組的 remaining_sessions／
+    available_sessions（曾經被使用者擔心是否會有這種跨套組互相扣到的
+    bug，實際上 remaining_sessions／available_sessions／count_booked_sessions
+    都是用 package.lessons 這個關聯，只看掛在同一個 package_id 底下的課，
+    這個測試把這件事釘死成回歸測試）。"""
+    student = create_student(client)
+    venue = create_venue(client)
+
+    # 舊套組：兩堂都已經排好日期，一堂是昨天（已上完）、一堂是明天（還沒上）
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    old_package = create_package(client, student["id"], venue["id"], [yesterday, tomorrow])
+    assert old_package["total_sessions"] == 2
+
+    old_before = client.get(f"/api/packages/{old_package['id']}").json()
+    assert old_before["available_sessions"] == 0  # 兩堂都已經排進行事曆，沒有可再加課的額度
+    assert old_before["remaining_sessions"] == 1  # 只有明天那一堂還沒上完
+
+    # 新套組：用「先開額度、之後在行事曆逐堂新增」模式，還沒排任何一堂課
+    res = client.post(
+        "/api/packages",
+        json={
+            "student_id": student["id"],
+            "name": "新套組",
+            "session_duration": 60,
+            "total_sessions": 3,
+            "coach_fee_per_hour": 1000,
+            "venue_fee_per_hour": 0,
+            "purchased_date": date.today().isoformat(),
+            "recur_start_time": "18:00:00",
+            "default_venue_id": venue["id"],
+            "payment_status": "unpaid",
+            "session_dates": [],
+        },
+    )
+    assert res.status_code == 201, res.text
+    new_package = res.json()
+    assert new_package["total_sessions"] == 3
+    assert new_package["available_sessions"] == 3
+
+    # 在新套組上加一堂課（模擬使用者在行事曆上約時間）
+    res = client.post(
+        "/api/lessons",
+        json={
+            "student_id": student["id"],
+            "venue_id": venue["id"],
+            "package_id": new_package["id"],
+            "date": (date.today() + timedelta(days=7)).isoformat(),
+            "start_time": "18:00:00",
+            "duration": 60,
+            "headcount": 1,
+        },
+    )
+    assert res.status_code == 201, res.text
+
+    # 新套組的額度確實被扣掉一堂，舊套組完全沒被動到
+    new_after = client.get(f"/api/packages/{new_package['id']}").json()
+    assert new_after["available_sessions"] == 2
+    assert new_after["remaining_sessions"] == 3  # 剛約的那堂是未來，還不算「用掉」
+
+    old_after = client.get(f"/api/packages/{old_package['id']}").json()
+    assert old_after["available_sessions"] == old_before["available_sessions"]
+    assert old_after["remaining_sessions"] == old_before["remaining_sessions"]
+
+    assert len(client.get(f"/api/packages/{old_package['id']}/lessons").json()) == 2
+    assert len(client.get(f"/api/packages/{new_package['id']}/lessons").json()) == 1
+
+
+def test_收入統計拆分已上完與未上完(client):
+    """驗證行為：收入統計的 total 要能拆成 completed_total（已上完：課程日期
+    已過，或已手動標記完成）跟 uncompleted_total（已收款但日期還沒到），
+    兩者相加要等於 total；已結清的額外費用算已上完（結清代表事情已經發
+    生），未收款的課程兩邊都不算。"""
+    student = create_student(client)
+    venue = create_venue(client)
+
+    def make_lesson(lesson_date: str, revenue: float, status: str = "scheduled") -> dict:
+        res = client.post(
+            "/api/lessons",
+            json={
+                "student_id": student["id"],
+                "venue_id": venue["id"],
+                "date": lesson_date,
+                "start_time": "10:00:00",
+                "duration": 60,
+                "headcount": 1,
+                "payment_status": "paid",
+                "revenue_amount": revenue,
+                "venue_fee_amount": 0,
+            },
+        )
+        assert res.status_code == 201, res.text
+        lesson = res.json()
+        if status != "scheduled":
+            res = client.put(
+                f"/api/lessons/{lesson['id']}",
+                json={
+                    "student_id": lesson["student_id"],
+                    "venue_id": lesson["venue_id"],
+                    "date": lesson["date"],
+                    "start_time": lesson["start_time"],
+                    "duration": lesson["duration"],
+                    "headcount": lesson["headcount"],
+                    "payment_status": lesson["payment_status"],
+                    "revenue_amount": lesson["revenue_amount"],
+                    "venue_fee_amount": lesson["venue_fee_amount"],
+                    "status": status,
+                },
+            )
+            assert res.status_code == 200, res.text
+            lesson = res.json()
+        return lesson
+
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+
+    make_lesson(yesterday, 1000)  # 日期已過，算已上完
+    future_lesson = make_lesson(tomorrow, 2000)  # 日期還沒到，算未上完
+    make_lesson(tomorrow, 500, status="completed")  # 日期沒到但手動標記完成，算已上完
+    make_lesson(yesterday, 9999, status="cancelled")  # 已取消，兩邊都不算
+
+    res = client.post(
+        "/api/adjustments",
+        json={"lesson_id": future_lesson["id"], "type": "other", "amount": 300, "note": "已結清"},
+    )
+    settled = res.json()
+    client.patch(f"/api/adjustments/{settled['id']}/settle")
+
+    res = client.get("/api/stats/revenue")
+    assert res.status_code == 200
+    stats = res.json()
+    assert stats["completed_total"] == 1000 + 500 + 300
+    assert stats["uncompleted_total"] == 2000
+    assert stats["completed_total"] + stats["uncompleted_total"] == stats["total"]

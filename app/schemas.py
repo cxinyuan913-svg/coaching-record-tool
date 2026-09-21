@@ -204,6 +204,9 @@ class RevenueStats(BaseModel):
     month: float
     year: float
     total: float
+    # total 的拆分：completed_total + uncompleted_total == total
+    completed_total: float  # 已上完的收入（課程日期已過或已標記完成）
+    uncompleted_total: float  # 已收款但課程日期還沒到的收入
 
 
 class AdjustmentBase(BaseModel):
