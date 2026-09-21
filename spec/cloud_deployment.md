@@ -139,6 +139,30 @@ scp -r coach@<VPS的IP>:~/coaching-record-tool/backups ./coaching-record-tool-ba
 
 ---
 
+## 回退到本機（雲端版本出問題、想先切回本機用的時候）
+
+這次雲端化完全沒有動到本機現有的東西——本機的 `coaching.db`、
+`run_server_hidden.vbs`、Windows 工作排程器都還在，隨時切得回來。
+**唯一要注意的是資料會分岔**：雲端版本正式在用之後，你在雲端上新增/
+修改的課程，本機那份 `coaching.db` 完全不知道、也不會自動同步。所以
+回退前一定要先把雲端最新的資料抓回來，不能直接啟用本機那份舊資料，
+不然雲端上新增的東西會憑空消失。
+
+1. **先把雲端最新的 `coaching.db` 抓回本機、覆蓋掉本機那份舊的**：
+   ```bash
+   # 在本機電腦執行
+   scp coach@<VPS的IP>:~/coaching-record-tool/coaching.db ./coaching.db
+   ```
+   如果不確定雲端服務還正不正常、`scp` 抓不到最新檔案，改抓
+   `backups/` 目錄裡最新一份的備份也可以（見上面「資料庫備份」那節）。
+2. 確認抓回來的資料是最新、沒有缺東西之後，再重新啟用 Windows 工作
+   排程器（`CoachingRecordToolServer`）跑本機版本。
+3. 之後如果要再切回雲端，記得反過來：把本機這段期間的異動再 `scp`
+   回 VPS，一樣要先確認哪一份才是最新的，不要兩邊同時有人在用、
+   互相蓋掉對方的資料。
+
+---
+
 ## 之後要停用時（見 CLAUDE.md 的操作風險提醒，刪除前務必先備份）
 
 1. 先跑一次 `scripts/backup_db.sh`（或直接 `scp` 把 `coaching.db` 抓
