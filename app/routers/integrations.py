@@ -1,8 +1,10 @@
-"""給外部自動化系統用的資料介接端點（見動智館自動訂場系統的介接需求文件）。
+"""給外部自動化系統用的資料介接端點（動智館自動訂場系統、公開預約網站）。
 
 這裡的端點都需要帶 `Authorization: Bearer <token>`（見 app/auth.py），
 跟網站本身給瀏覽器用的其他 API 是分開的兩件事：這裡是特地開給「無人
-值守、排程觸發」的外部系統呼叫用的資料介面。
+值守、排程觸發」或「另一個系統呼叫」用的資料介面。兩個外部系統各自
+驗證各自的 token，不共用，所以這個 router 不能整個掛統一的
+`dependencies=`，改成每個端點各自指定要用哪一個。
 """
 from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
@@ -11,19 +13,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import verify_booking_token
+from app.auth import verify_booking_token, verify_public_booking_token
 from app.database import get_db
+from app.models import LessonStatus, PaymentStatus, Tier
+from app.pricing import resolve_price
 
-router = APIRouter(
-    prefix="/api/integrations",
-    tags=["integrations"],
-    dependencies=[Depends(verify_booking_token)],
-)
+router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 TAIWAN_TZ = timezone(timedelta(hours=8))
 
 
-@router.get("/venue-schedule", response_model=schemas.VenueScheduleOut)
+@router.get(
+    "/venue-schedule",
+    response_model=schemas.VenueScheduleOut,
+    dependencies=[Depends(verify_booking_token)],
+)
 def venue_schedule(
     venue: str = Query(..., description="場館名稱，需完全符合場地管理裡的名稱"),
     from_: date_type = Query(..., alias="from", description="起始日期（含）"),
@@ -76,4 +80,78 @@ def venue_schedule(
         to=to,
         generated_at=datetime.now(TAIWAN_TZ),
         lessons=items,
+    )
+
+
+@router.post(
+    "/lessons",
+    response_model=schemas.PublicBookingLessonOut,
+    status_code=201,
+    dependencies=[Depends(verify_public_booking_token)],
+)
+def create_lesson_from_public_booking(
+    payload: schemas.PublicBookingLessonCreate, db: Session = Depends(get_db)
+):
+    """公開預約網站核准一筆申請後呼叫，自動建立一堂正式課程，教練不用手動
+    謄一次（見兩個專案之間的介接約定）。"""
+    venue = db.query(models.Venue).filter(models.Venue.name == payload.venue_name).first()
+    if venue is None:
+        raise HTTPException(status_code=400, detail=f"找不到場館「{payload.venue_name}」")
+
+    # 衝突判斷比照 app/package_logic.py 的 mark_leave_and_reschedule：同一個
+    # 時間點教練只能上一堂課，不分場地——這是教練自己的行事曆衝突，不是
+    # 場地容量問題
+    conflict = (
+        db.query(models.Lesson)
+        .filter(
+            models.Lesson.date == payload.date,
+            models.Lesson.start_time == payload.start_time,
+            models.Lesson.status != LessonStatus.CANCELLED,
+        )
+        .first()
+    )
+    if conflict is not None:
+        raise HTTPException(status_code=409, detail="這個時間教練已經有其他課程了")
+
+    # v1 刻意簡化：姓名＋聯絡方式完全相符才算同一人，找不到就新增一筆新學生，
+    # 不做模糊比對／自動合併，重複學生由教練事後自己在教練工具裡手動處理
+    student = (
+        db.query(models.Student)
+        .filter(
+            models.Student.name == payload.student_name,
+            models.Student.contact == payload.student_contact,
+        )
+        .first()
+    )
+    student_created = student is None
+    if student is None:
+        student = models.Student(
+            name=payload.student_name, contact=payload.student_contact, tier=Tier.NEW
+        )
+        db.add(student)
+        db.flush()  # 取得 student.id 供下面建立 Lesson 用
+
+    revenue_amount = resolve_price(db, student.tier, headcount=1, duration_minutes=payload.duration)
+
+    lesson = models.Lesson(
+        student_id=student.id,
+        venue_id=venue.id,
+        date=payload.date,
+        start_time=payload.start_time,
+        duration=payload.duration,
+        headcount=1,
+        status=LessonStatus.SCHEDULED,
+        payment_status=PaymentStatus.UNPAID,
+        revenue_amount=revenue_amount,
+        venue_fee_amount=0,
+    )
+    db.add(lesson)
+    db.commit()
+    db.refresh(lesson)
+
+    return schemas.PublicBookingLessonOut(
+        lesson_id=lesson.id,
+        student_id=student.id,
+        student_created=student_created,
+        revenue_amount=revenue_amount,
     )

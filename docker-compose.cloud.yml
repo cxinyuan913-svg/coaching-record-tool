@@ -12,6 +12,7 @@ services:
     volumes:
       - ./coaching.db:/app/coaching.db
       - ./booking_api_token.txt:/app/booking_api_token.txt
+      - ./public_booking_api_token.txt:/app/public_booking_api_token.txt
       - ./discord_webhook_url.txt:/app/discord_webhook_url.txt
       - ./scheduler_state.json:/app/scheduler_state.json
 

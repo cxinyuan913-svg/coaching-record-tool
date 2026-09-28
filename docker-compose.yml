@@ -10,9 +10,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # 這四個檔案要在容器重建之間保留狀態，掛載前必須已經存在於本機，
+      # 這五個檔案要在容器重建之間保留狀態，掛載前必須已經存在於本機，
       # 否則 Docker 會把它們誤判成資料夾建立，導致啟動失敗或寫入錯位置
       - ./coaching.db:/app/coaching.db
       - ./booking_api_token.txt:/app/booking_api_token.txt
+      - ./public_booking_api_token.txt:/app/public_booking_api_token.txt
       - ./discord_webhook_url.txt:/app/discord_webhook_url.txt
       - ./scheduler_state.json:/app/scheduler_state.json

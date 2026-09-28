@@ -10,7 +10,7 @@
 ## 階段一：Docker（近期，對現在的問題有實際幫助）
 
 - 一個 `Dockerfile`：`python:3.11-slim` 為基底，複製程式碼跟 `requirements.txt`、安裝依賴、`CMD` 跑 `uvicorn app.main:app --host 0.0.0.0 --port 8000`。
-- 一個 `docker-compose.yml`，掛 volume 保留容器重建之間需要留住的狀態：`coaching.db`、`booking_api_token.txt`、`discord_webhook_url.txt`、`scheduler_state.json`——這幾個檔案都不能隨容器重建就消失。
+- 一個 `docker-compose.yml`，掛 volume 保留容器重建之間需要留住的狀態：`coaching.db`、`booking_api_token.txt`、`public_booking_api_token.txt`、`discord_webhook_url.txt`、`scheduler_state.json`——這幾個檔案都不能隨容器重建就消失。
 - 設定 `restart: unless-stopped`。這一項直接解決現有的痛點：Docker Desktop 原生就會在容器意外結束時重啟它，不需要「使用者先登入 Windows」這個前提，也不受任何對話環境的資源狀況影響。
 - 這一階段做完之後，原本用來解決同一個問題的 Windows 工作排程器設定（`CoachingRecordToolServer`）就可以退役。
 

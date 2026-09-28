@@ -61,6 +61,7 @@ flowchart TD
 
     subgraph External["外部系統"]
         BookingBot["動智館自動訂場系統<br/>（另一套獨立的瀏覽器自動化程式）"]
+        BookingSite["coaching-booking-site<br/>（公開預約網站，完全獨立的專案／資料庫）"]
         Discord["Discord（手機推播）"]
     end
 
@@ -70,6 +71,7 @@ flowchart TD
     Scheduler --> ORM
     Notify -- "webhook POST" --> Discord
     BookingBot -- "GET .../venue-schedule<br/>Bearer Token" --> Routers
+    BookingSite -- "POST .../lessons<br/>Bearer Token（獨立於動智館那組）" --> Routers
 ```
 
 **分層原則**：路由層（`routers/*.py`）只負責「收請求、找資料、呼叫邏輯、
@@ -216,7 +218,7 @@ erDiagram
 | `database.py` | SQLite 連線、session 工廠設定、輕量欄位遷移（`ensure_schema_migrations`） |
 | `models.py` | 六張表的 ORM 定義與關聯 |
 | `schemas.py` | 所有 API 的請求/回應格式（Pydantic） |
-| `auth.py` | 給外部自動化系統用的 Bearer Token 驗證，只套用在 `integrations` router |
+| `auth.py` | 給外部自動化系統用的 Bearer Token 驗證，只套用在 `integrations` router；動智館跟公開預約網站各自一組獨立 token，可分別撤銷 |
 | `notifications.py` | 發送 Discord Webhook 通知（純 stdlib，沒有額外依賴） |
 | `scheduler.py` | 背景執行緒：每分鐘檢查上課提醒／套組結束提醒／未收款提醒三件事 |
 | `pricing.py` | 單堂制查價目表計價（含 3 人以上朋友價退回熟客價的例外） |
@@ -230,7 +232,7 @@ erDiagram
 | `routers/adjustments.py` | 額外費用 CRUD、結清狀態切換 |
 | `routers/stats.py` | 收入統計（週/月/年/依學生/依月份）、未收款清單彙整 |
 | `routers/booking.py` | 訂場檢查三分區邏輯、標記已訂 |
-| `routers/integrations.py` | 給外部訂場自動化系統查詢課表的唯讀端點（`GET /venue-schedule`），需要 Bearer Token |
+| `routers/integrations.py` | 給外部系統用的介接端點：動智館查課表的唯讀端點（`GET /venue-schedule`）、公開預約網站核准申請後建立正式課程的端點（`POST /lessons`），各自需要各自的 Bearer Token |
 
 ### 前端（`static/js/`）
 
@@ -281,6 +283,7 @@ erDiagram
 - 數字輸入框防止滑鼠滾輪誤改金額
 - 給外部訂場自動化系統用的資料介接 API（`/api/integrations/venue-schedule`），含獨立的 Bearer Token 驗證機制
 - 背景排程系統：上課前一小時、套組剩 7 天、逾期未收款/未結算三種 Discord 通知
+- 給公開預約網站（`coaching-booking-site`，獨立專案）核准申請後自動建立正式課程用的介接端點（`POST /api/integrations/lessons`）
 
 ---
 

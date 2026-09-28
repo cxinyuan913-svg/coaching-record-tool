@@ -299,3 +299,22 @@ class VenueScheduleOut(BaseModel):
     to: date
     generated_at: datetime
     lessons: list[VenueScheduleLesson]
+
+
+class PublicBookingLessonCreate(BaseModel):
+    """給公開預約網站核准申請後呼叫，用來自動建立一堂正式課程。"""
+
+    venue_name: str
+    student_name: str
+    student_contact: str | None = None
+    date: date
+    start_time: time
+    duration: int
+    note: str | None = None
+
+
+class PublicBookingLessonOut(BaseModel):
+    lesson_id: int
+    student_id: int
+    student_created: bool
+    revenue_amount: float
