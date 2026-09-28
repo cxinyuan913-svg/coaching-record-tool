@@ -11,6 +11,7 @@ from app.database import Base, SessionLocal, engine, ensure_schema_migrations
 from app.routers import (
     adjustments,
     booking,
+    booking_parser,
     integrations,
     lessons,
     packages,
@@ -40,6 +41,7 @@ app.include_router(stats.router)
 app.include_router(booking.router)
 app.include_router(adjustments.router)
 app.include_router(integrations.router)
+app.include_router(booking_parser.router)
 
 # 測試會把 DATABASE_URL 指向暫存資料庫，此時不啟動背景排程，避免跟測試的
 # drop_all/create_all 互相干擾，也避免測試過程真的打出 Discord 通知

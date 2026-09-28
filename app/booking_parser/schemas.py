@@ -1,10 +1,13 @@
-"""約課訊息 LLM 結構化抽取的輸出格式（見功能規格 1.1）。
+"""約課訊息 LLM 結構化抽取的輸出格式（見功能規格 1.1），以及這整個
+booking_parser 子系統對外 API 用的請求/回應格式（見規格 1.7）。放在
+同一個檔案是刻意的：這個子系統的 schema 都只有這裡自己會用到，不用
+散到 app/schemas.py 裡跟其他既有功能的 schema 混在一起。
 
 LLM 只負責語言理解，日期不直接輸出成絕對日期（例如「2026-10-07」），而是
 輸出 DateExpr 這種相對描述（例如「下週三」），由 resolver.py 換算成實際
 日期——這樣日期不會算錯，也容易測試（見 resolver.py 開頭的說明）。
 """
-from datetime import time
+from datetime import datetime, time
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
@@ -58,3 +61,10 @@ class ParsedBookingRequest(BaseModel):
     windows: list[TimeWindowExpr] = Field(default_factory=list, max_length=6)
     duration_minutes: int | None = Field(None, ge=30, le=240)
     ambiguities: list[str] = Field(default_factory=list)  # LLM 覺得不確定的地方
+
+
+class ParseMessageRequest(BaseModel):
+    """POST /api/booking-requests/parse 的請求格式（規格 1.7）。"""
+
+    text: str
+    reference_datetime: datetime | None = None  # 選填，預設現在（台灣時間）
