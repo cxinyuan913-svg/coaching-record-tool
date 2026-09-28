@@ -191,3 +191,59 @@ class Adjustment(Base):
     @property
     def lesson_date(self):
         return self.lesson.date
+
+
+class VenueArea(Base):
+    """場地↔地區對照（例如「竹北」對到某幾個場地），給約課訊息解析功能
+    查詢地區時用。一個場地可以對應多個地區字串，教練直接改這張表即可，
+    不用改程式碼。全新的表，不影響 Venue 既有欄位。"""
+
+    __tablename__ = "venue_areas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), nullable=False)
+    area: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    venue: Mapped["Venue"] = relationship()
+
+
+class StudentAlias(Base):
+    """學生別名（暱稱、不同稱呼方式），給約課訊息解析比對學生姓名用。
+    全新的表，不影響 Student 既有欄位。"""
+
+    __tablename__ = "student_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    alias: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    student: Mapped["Student"] = relationship()
+
+
+class BookingRequestStatus(str, enum.Enum):
+    OK = "ok"
+    NEEDS_REVIEW = "needs_review"
+    NOT_BOOKING = "not_booking"
+
+
+class BookingRequest(Base):
+    """約課訊息解析紀錄：原始訊息、LLM 原始輸出、換算後結果、驗證狀態，
+    每次呼叫都留一筆，供之後評測跟除錯用。"""
+
+    __tablename__ = "booking_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    reference_datetime: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    parsed_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[BookingRequestStatus] = mapped_column(
+        Enum(BookingRequestStatus), nullable=False, default=BookingRequestStatus.NEEDS_REVIEW
+    )
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
