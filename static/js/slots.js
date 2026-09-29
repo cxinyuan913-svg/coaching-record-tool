@@ -1,20 +1,6 @@
-// 找空檔頁邏輯：貼訊息 → 解析（Phase 1）→ 找空檔（Phase 2）→ 複製訊息
+// 找空檔頁邏輯：選日期範圍／時段／場館／時長 → 找空檔 → 複製訊息給學生
 
 let venues = [];
-let currentRequestId = null;
-
-const STATUS_LABELS = {
-  ok: "解析完成",
-  needs_review: "需要人工確認",
-  not_booking: "不是約課訊息",
-};
-
-const DURATION_SOURCE_LABELS = {
-  request: "手動指定",
-  message: "學生訊息有講",
-  student_last_lesson: "依該學生最近一堂課",
-  default: "預設值",
-};
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -36,25 +22,71 @@ function dayLabel(dateString) {
   return `${m}/${d}(${weekday})`;
 }
 
-async function parseAndSuggest() {
-  const text = document.getElementById("msg-input").value.trim();
-  if (!text) return;
-  const status = document.getElementById("parse-status");
-  const button = document.getElementById("btn-parse");
+function setDefaultDates() {
+  // 預設查明天起一週
+  const from = new Date();
+  from.setDate(from.getDate() + 1);
+  const to = new Date(from);
+  to.setDate(to.getDate() + 6);
+  document.getElementById("f-date-from").value = toLocalDateString(from);
+  document.getElementById("f-date-to").value = toLocalDateString(to);
+}
+
+function renderVenueChecks(checkedIds) {
+  document.getElementById("venue-checks").innerHTML = venues
+    .map(
+      (v) => `<label><input type="checkbox" value="${v.id}" ${
+        checkedIds.includes(v.id) ? "checked" : ""
+      } />${escapeHtml(v.name)}</label>`
+    )
+    .join("");
+}
+
+async function renderAreaButtons() {
+  const presets = await api.get("/api/slot-search/areas");
+  const box = document.getElementById("area-buttons");
+  box.innerHTML = Object.entries(presets)
+    .filter(([, ids]) => ids.length > 0)
+    .map(
+      ([area, ids]) =>
+        `<button type="button" class="secondary" data-ids="${ids.join(",")}">${escapeHtml(area)}場館</button>`
+    )
+    .join("");
+  box.querySelectorAll("button").forEach((btn) =>
+    btn.addEventListener("click", () => renderVenueChecks(btn.dataset.ids.split(",").map(Number)))
+  );
+}
+
+function selectedTimeRange() {
+  const preset = document.querySelector('input[name="time-preset"]:checked').value;
+  if (preset !== "custom") return preset.split("-");
+  return [document.getElementById("f-time-from").value, document.getElementById("f-time-to").value];
+}
+
+async function searchSlots() {
+  const status = document.getElementById("search-status");
+  const venueIds = [...document.querySelectorAll("#venue-checks input:checked")].map((el) =>
+    Number(el.value)
+  );
+  if (venueIds.length === 0) {
+    status.textContent = "請至少勾選一個場館";
+    return;
+  }
+  const [timeFrom, timeTo] = selectedTimeRange();
+  const button = document.getElementById("btn-search");
   button.disabled = true;
-  status.textContent = "解析中…";
-  document.getElementById("result-block").hidden = true;
-  document.getElementById("conditions-block").hidden = true;
+  status.textContent = "查詢中…";
   try {
-    const parsed = await api.post("/api/booking-requests/parse", { text });
-    currentRequestId = parsed.booking_request_id;
-    renderParseSummary(parsed);
+    const result = await api.post("/api/slot-search", {
+      date_from: document.getElementById("f-date-from").value,
+      date_to: document.getElementById("f-date-to").value,
+      time_from: timeFrom,
+      time_to: timeTo,
+      venue_ids: venueIds,
+      duration_minutes: Number(document.getElementById("f-duration").value),
+    });
+    renderResult(result);
     status.textContent = "";
-    if (parsed.resolved_windows.length === 0) {
-      status.textContent = "這則訊息沒有可用的日期時段，無法找空檔";
-      return;
-    }
-    await suggest(null);
   } catch (e) {
     status.textContent = `失敗：${e.message}`;
   } finally {
@@ -62,82 +94,27 @@ async function parseAndSuggest() {
   }
 }
 
-function renderParseSummary(parsed) {
-  const box = document.getElementById("parse-summary");
-  const p = parsed.parsed || {};
-  const windows = parsed.resolved_windows
-    .map((w) => `${dayLabel(w.date)} ${hm(w.start)}-${hm(w.end)}`)
-    .join("、");
-  let studentText = p.student_name ? escapeHtml(p.student_name) : "（沒提到）";
-  if (parsed.student_match && parsed.student_match.needs_review) studentText += "　⚠ 沒有確定比對到";
-  let areaText = p.area ? escapeHtml(p.area) : "（沒提到，找全部場館）";
-  if (parsed.area_match && parsed.area_match.needs_review) areaText += "　⚠ 沒有對到場館";
-
-  box.innerHTML = `
-    <div><strong>${STATUS_LABELS[parsed.status] || parsed.status}</strong>
-      <span class="hint">（紀錄編號 ${parsed.booking_request_id}）</span></div>
-    <div>學生：${studentText}</div>
-    <div>地區：${areaText}</div>
-    <div>時段：${windows || "（無）"}</div>
-    <div>時長：${p.duration_minutes ? `${p.duration_minutes} 分鐘` : "（沒提到）"}</div>
-    ${parsed.ambiguities.map((a) => `<div class="hint">⚠ ${escapeHtml(a)}</div>`).join("")}
-  `;
-  box.hidden = false;
-}
-
-async function suggest(overrides) {
-  const result = await api.post(`/api/booking-requests/${currentRequestId}/suggest`, overrides);
-  renderConditions(result);
-  renderResult(result);
-}
-
-function renderConditions(result) {
-  const select = document.getElementById("f-duration");
-  // 時長不是半小時的倍數（例如學生說 45 分鐘）時，選單裡沒有這個值，補一個
-  if (![...select.options].some((o) => o.value === String(result.duration_minutes))) {
-    const opt = document.createElement("option");
-    opt.value = result.duration_minutes;
-    opt.textContent = `${result.duration_minutes} 分鐘`;
-    select.appendChild(opt);
-  }
-  select.value = String(result.duration_minutes);
-  document.getElementById("duration-source").textContent =
-    `（${DURATION_SOURCE_LABELS[result.duration_source] || result.duration_source}）`;
-  const box = document.getElementById("venue-checks");
-  box.innerHTML = venues
-    .map(
-      (v) => `<label><input type="checkbox" value="${v.id}" ${
-        result.venue_ids.includes(v.id) ? "checked" : ""
-      } />${escapeHtml(v.name)}</label>`
-    )
-    .join("");
-  document.getElementById("conditions-block").hidden = false;
+function busyText(list) {
+  return list.length
+    ? `當天已有：${list.map((b) => `${hm(b.start)}-${hm(b.end)} ${escapeHtml(b.venue_name)}`).join("、")}`
+    : "當天沒有其他課";
 }
 
 function renderResult(result) {
-  document.getElementById("notes").innerHTML = result.notes
-    .map((n) => `<div>${escapeHtml(n)}</div>`)
-    .join("");
-
   const rows = result.anchored_candidates.map(
     (c) => `<tr>
       <td>${dayLabel(c.date)}</td>
       <td>${hm(c.start)}-${hm(c.end)}</td>
       <td>${escapeHtml(c.venue_name)}</td>
-      <td>${c.cross_venue ? "跨館貼靠" : "同館貼靠"}</td>
+      <td class="hint">${c.cross_venue ? "換館接課" : "同館接課"}</td>
     </tr>`
   );
   result.dedicated_dates.forEach((d) => {
-    const others = d.other_busy.length
-      ? `當天已有：${d.other_busy
-          .map((b) => `${hm(b.start)}-${hm(b.end)} ${escapeHtml(b.venue_name)}`)
-          .join("、")}`
-      : "當天沒有其他課";
     rows.push(`<tr>
       <td>${dayLabel(d.date)}</td>
-      <td class="hint">${others}</td>
+      <td>${d.spans.map((sp) => `${hm(sp.start)}-${hm(sp.end)}`).join("、")}</td>
       <td>—</td>
-      <td>專程</td>
+      <td class="hint">彈性日（需專程前往）；${busyText(d.other_busy)}</td>
     </tr>`);
   });
   document.getElementById("candidate-list").innerHTML =
@@ -146,24 +123,6 @@ function renderResult(result) {
   document.getElementById("msg-output").value = result.message;
   document.getElementById("copy-status").textContent = "";
   document.getElementById("result-block").hidden = false;
-}
-
-async function resuggest() {
-  const venueIds = [...document.querySelectorAll("#venue-checks input:checked")].map((el) =>
-    Number(el.value)
-  );
-  if (venueIds.length === 0) {
-    document.getElementById("notes").innerHTML = "<div>請至少勾選一個場館</div>";
-    return;
-  }
-  try {
-    await suggest({
-      duration_minutes: Number(document.getElementById("f-duration").value),
-      venue_ids: venueIds,
-    });
-  } catch (e) {
-    document.getElementById("notes").innerHTML = `<div>失敗：${escapeHtml(e.message)}</div>`;
-  }
 }
 
 async function copyMessage() {
@@ -221,16 +180,25 @@ async function saveTravelTimes() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  setDefaultDates();
   populateDurationSelect("f-duration", 240);
+  document.getElementById("f-duration").value = "60";
+  document.querySelectorAll('input[name="time-preset"]').forEach((el) =>
+    el.addEventListener("change", () => {
+      document.getElementById("custom-time").hidden = el.value !== "custom" || !el.checked;
+    })
+  );
+
   venues = await api.get("/api/venues");
+  renderVenueChecks(venues.map((v) => v.id));
+  await renderAreaButtons();
   await loadTravelTimes();
   // 還沒填過任何車程時，預設展開車程表提醒要填
   if (!document.querySelector(".travel-input[value]:not([value=''])")) {
     document.getElementById("travel-details").open = true;
   }
 
-  document.getElementById("btn-parse").addEventListener("click", parseAndSuggest);
-  document.getElementById("btn-suggest").addEventListener("click", resuggest);
+  document.getElementById("btn-search").addEventListener("click", searchSlots);
   document.getElementById("btn-copy").addEventListener("click", copyMessage);
   document.getElementById("btn-save-travel").addEventListener("click", saveTravelTimes);
 });

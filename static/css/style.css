@@ -392,18 +392,36 @@ details table {
   font-weight: normal;
 }
 
-.warn-list div {
-  background: #fff4e0;
-  border-left: 3px solid #f0a030;
-  padding: 6px 10px;
-  margin-bottom: 6px;
-  font-size: 13px;
-}
-
 .panel select {
   max-width: 240px;
 }
 
+.inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* display:flex 會蓋掉 hidden 屬性的預設隱藏效果，要另外指定 */
+.inline-row[hidden] {
+  display: none;
+}
+
+.inline-row input {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
 .travel-input {
   width: 90px;
+}
+
+/* 找空檔結果表：日期、時段、場館不換行，說明欄吃剩下的寬度 */
+#result-block th:nth-child(-n + 3),
+#candidate-list td:nth-child(-n + 3) {
+  white-space: nowrap;
 }
