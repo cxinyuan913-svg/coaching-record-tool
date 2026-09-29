@@ -42,6 +42,12 @@ Docker 讓服務更穩」，解決的是「伺服器有沒有開著」的問題�
 3. 重新整理網頁確認。若更新後有問題，回報錯誤；要退回上一版可以
    `git log --oneline -5` 找到上一個 commit，`git checkout <commit>` 後再跑一次第 2 步的 compose 指令。
 
+每次部署或更新後，**讀取跟寫入都要各驗一次**（2026-09-29 上線當天只驗了讀取，
+結果所有寫入都因為容器內 /app 資料夾權限失敗了大半天，Dockerfile 已修正）：
+```bash
+cd ~/coaching-record-tool && docker compose -f docker-compose.cloud.yml exec coaching-record-tool python -c "import sqlite3; c=sqlite3.connect('coaching.db'); c.execute('create table _write_test(x)'); c.execute('drop table _write_test'); c.commit(); print('寫入正常')"
+```
+
 看服務狀態與紀錄：
 ```bash
 cd ~/coaching-record-tool && docker compose -f docker-compose.cloud.yml ps && docker compose -f docker-compose.cloud.yml logs --tail 50
