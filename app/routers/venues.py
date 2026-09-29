@@ -47,5 +47,9 @@ def delete_venue(venue_id: int, db: Session = Depends(get_db)):
     db_venue = db.get(models.Venue, venue_id)
     if db_venue is None:
         raise HTTPException(status_code=404, detail="場地不存在")
+    # 車程表是場地的附屬資料，場地刪掉就一起清掉，不留孤兒資料
+    db.query(models.VenueTravelTime).filter(
+        (models.VenueTravelTime.venue_a_id == venue_id) | (models.VenueTravelTime.venue_b_id == venue_id)
+    ).delete(synchronize_session=False)
     db.delete(db_venue)
     db.commit()

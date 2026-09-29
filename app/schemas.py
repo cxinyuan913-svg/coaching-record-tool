@@ -30,6 +30,15 @@ class VenueOut(VenueBase):
     id: int
 
 
+class VenueTravelTimeItem(BaseModel):
+    """一組場館之間的車程。兩個場館順序不拘，存檔時會自動排成 a < b；
+    travel_minutes 給 None 代表刪除這組車程（回到「不可銜接」）。"""
+
+    venue_a_id: int
+    venue_b_id: int
+    travel_minutes: int | None = Field(None, ge=0, le=300)
+
+
 class PriceRuleBase(BaseModel):
     headcount_min: int
     headcount_max: int

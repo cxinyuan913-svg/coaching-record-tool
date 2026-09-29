@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     Time,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -247,3 +248,17 @@ class BookingRequest(Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.now)
+
+
+class VenueTravelTime(Base):
+    """場館兩兩之間的固定車程（分鐘），給找空檔排班用（見 spec/scheduling-agent.md）。
+    雙向共用一筆，存的時候固定 venue_a_id < venue_b_id；同場館車程視為 0，
+    不存在這張表裡。查不到的組合代表「不可銜接」，不要自己猜一個預設值。"""
+
+    __tablename__ = "venue_travel_times"
+    __table_args__ = (UniqueConstraint("venue_a_id", "venue_b_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_a_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), nullable=False)
+    venue_b_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), nullable=False)
+    travel_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
