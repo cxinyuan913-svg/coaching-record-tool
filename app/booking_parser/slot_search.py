@@ -60,13 +60,7 @@ class CandidateOut(BaseModel):
     end: datetime
     venue_id: int
     venue_name: str
-    cross_venue: bool
     anchor_lesson_id: int
-
-
-class SpanOut(BaseModel):
-    start: datetime
-    end: datetime
 
 
 class BusyOut(BaseModel):
@@ -76,15 +70,18 @@ class BusyOut(BaseModel):
     end: datetime
 
 
-class DedicatedOut(BaseModel):
+class OpenBlockOut(BaseModel):
     date: date
-    spans: list[SpanOut]
+    start: datetime
+    end: datetime
+    venue_ids: list[int]
+    venue_names: list[str]
     other_busy: list[BusyOut]  # 只給教練參考，不會放進給學生的訊息
 
 
 class SlotSearchResult(BaseModel):
     anchored_candidates: list[CandidateOut]
-    dedicated_dates: list[DedicatedOut]
+    open_blocks: list[OpenBlockOut]
     message: str
 
 
@@ -96,23 +93,23 @@ def _fmt_hm(dt: datetime) -> str:
     return dt.strftime("%H:%M")
 
 
-def build_message(anchored: list[CandidateOut], dedicated: list[DedicatedOut]) -> str:
-    """固定範本組出直接給學生看的訊息，不出現「貼靠」「專程」這類內部用語，
+def build_message(anchored: list[CandidateOut], open_blocks: list[OpenBlockOut]) -> str:
+    """固定範本組出直接給學生看的訊息，不出現「接課」「空檔」這類內部用語，
     也不寫是接在哪堂課前後，不透露其他學生的資訊。"""
-    if not anchored and not dedicated:
+    if not anchored and not open_blocks:
         return NO_CANDIDATE_MESSAGE
 
     sections: list[str] = []
     if anchored:
-        lines = ["我這幾個時段可以："]
+        lines = ["我這幾個時段最方便："]
         for c in anchored:
             lines.append(f"・{_fmt_day(c.date)} {_fmt_hm(c.start)}-{_fmt_hm(c.end)} {c.venue_name}")
         sections.append("\n".join(lines))
-    if dedicated:
-        lines = ["這幾天比較彈性，時間可以再討論："]
-        for d in dedicated:
-            ranges = "、".join(f"{_fmt_hm(sp.start)}-{_fmt_hm(sp.end)}" for sp in d.spans)
-            lines.append(f"・{_fmt_day(d.date)} {ranges}")
+    if open_blocks:
+        lines = ["其他有空的時段（場館可以選）："]
+        for b in open_blocks:
+            venues = "、".join(b.venue_names)
+            lines.append(f"・{_fmt_day(b.date)} {_fmt_hm(b.start)}-{_fmt_hm(b.end)} {venues}")
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
 
@@ -170,19 +167,22 @@ def search_slots(db: Session, req: SlotSearchRequest, now: datetime) -> SlotSear
     anchored = [
         CandidateOut(**c.model_dump(), venue_name=venues[c.venue_id].name) for c in result.anchored
     ]
-    dedicated = [
-        DedicatedOut(
-            date=d.date,
-            spans=[SpanOut(start=sp.start, end=sp.end) for sp in d.spans],
+    open_blocks = [
+        OpenBlockOut(
+            date=b.date,
+            start=b.start,
+            end=b.end,
+            venue_ids=b.venue_ids,
+            venue_names=[venues[v].name for v in b.venue_ids],
             other_busy=[
-                BusyOut(venue_id=b.venue_id, venue_name=venues[b.venue_id].name, start=b.start, end=b.end)
-                for b in d.other_busy
+                BusyOut(venue_id=o.venue_id, venue_name=venues[o.venue_id].name, start=o.start, end=o.end)
+                for o in b.other_busy
             ],
         )
-        for d in result.dedicated
+        for b in result.open_blocks
     ]
     return SlotSearchResult(
         anchored_candidates=anchored,
-        dedicated_dates=dedicated,
-        message=build_message(anchored, dedicated),
+        open_blocks=open_blocks,
+        message=build_message(anchored, open_blocks),
     )

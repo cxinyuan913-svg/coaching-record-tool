@@ -1,8 +1,12 @@
-"""找空檔排班的核心演算法（見 spec/scheduling-agent.md「候選時段演算法」）。
+"""找空檔的核心演算法（見 spec/scheduling-agent.md「候選時段演算法」）。
 
 這裡刻意寫成純函式：輸入是已經撈好的占用課程、學生時段、車程表，輸出是
-候選清單，完全不碰資料庫也不呼叫 LLM，所以結果可預期、測試不用準備資料庫。
-撈資料跟組訊息文字是 suggest.py 的工作。
+兩組候選，完全不碰資料庫也不呼叫 LLM，所以結果可預期、測試不用準備資料庫。
+撈資料跟組訊息文字是 slot_search.py 的工作。
+
+- 第一組「同館接課」：緊接在既有課程前後、同一個場館的具體時段，交通最省。
+- 第二組「大空檔」：每個場館各自算出趕得到的連續空檔（至少 2 小時），時段
+  相同的場館合併成一筆。
 
 車程的用法：教練同一時間只有一個人，候選時段前後最接近的那兩堂課（不限
 場館）決定他來不來得及到場、來不來得及離開。只看「最接近的前一堂 / 後一堂」
@@ -17,10 +21,13 @@ from pydantic import BaseModel
 WORK_START = time(8, 0)
 WORK_END = time(22, 30)
 
-# 跨館候選所在場館當天至少要連續待這麼久，去回程才划算
-MIN_CROSS_VENUE_BLOCK_MINUTES = 120
-
 MAX_ANCHORED_CANDIDATES = 5
+
+# 大空檔至少要多長才列出（從最早開始到最晚下課）
+MIN_OPEN_BLOCK = timedelta(hours=2)
+
+# 大空檔的掃描間隔：開始時間只考慮整點與半點
+OPEN_BLOCK_STEP = timedelta(minutes=30)
 
 # travel(a, b) → 分鐘；同場館回 0；查不到回 None（代表不可銜接）
 TravelLookup = Callable[[int, int], int | None]
@@ -41,37 +48,28 @@ class TimeWindow(BaseModel):
 
 
 class AnchoredCandidate(BaseModel):
-    """貼靠候選：緊貼某一堂既有課程的具體時段。"""
+    """同館接課：緊接在某一堂既有課程前後、同一個場館的具體時段。"""
 
     date: date
     start: datetime
     end: datetime
     venue_id: int
-    cross_venue: bool  # 候選場館跟錨點課程不同館
     anchor_lesson_id: int
 
 
-class TimeSpan(BaseModel):
-    """一段可以上課的連續時段：開始時間可以落在 start 到 last_start 之間，
-    最晚在 end 下課。"""
-
-    start: datetime
-    end: datetime
-    last_start: datetime
-
-
-class DedicatedDate(BaseModel):
-    """專程候選：當天沒有貼靠候選，但有真的趕得到的空檔。列出可行時段，
-    實際幾點由教練跟學生再談。"""
+class OpenBlock(BaseModel):
+    """大空檔：這些場館都能在 start 之後開始上課、最晚 end 下課的連續時段。"""
 
     date: date
-    spans: list[TimeSpan]  # 可行時段（已算車程），可能不只一段
+    start: datetime
+    end: datetime
+    venue_ids: list[int]
     other_busy: list[BusySlot]  # 當天已占用的時段（不限場館），給教練參考
 
 
 class SlotSearchResult(BaseModel):
     anchored: list[AnchoredCandidate]
-    dedicated: list[DedicatedDate]
+    open_blocks: list[OpenBlock]
 
 
 def make_travel_lookup(pairs: dict[tuple[int, int], int]) -> TravelLookup:
@@ -95,9 +93,8 @@ def _within_work_hours(start: datetime, end: datetime) -> bool:
 
 
 def _starts_in_any_window(start: datetime, windows: list[TimeWindow]) -> bool:
-    """只要求「開始時間」落在學生時段內，不要求整堂課都在裡面：學生說「七點」
-    時 resolver 給的時段是 19:00-20:00，但兩小時的課 19:00-21:00 也是學生
-    要的意思。結束時間另外由工作時段把關。"""
+    """只要求「開始時間」落在學生時段內，不要求整堂課都在裡面：例如晚上
+    18:00-22:00，21:30 開始、22:30 下課的課也算。結束時間另外由工作時段把關。"""
     return any(w.start <= start < w.end for w in windows)
 
 
@@ -128,60 +125,46 @@ def _is_reachable(
     return True
 
 
-def _contiguous_block_minutes(start: datetime, end: datetime, venue_id: int, busy: list[BusySlot]) -> int:
-    """候選本身加上同館首尾相接（間隔 0 分鐘）的既有課程，總共連續幾分鐘。
-    其他候選不算進來：候選之間是互斥的選項，學生最後只會選一個。"""
-    same_venue = [s for s in busy if s.venue_id == venue_id]
-    block_start, block_end = start, end
-    extended = True
-    while extended:
-        extended = False
-        for s in same_venue:
-            if s.end == block_start:
-                block_start = s.start
-                extended = True
-            elif s.start == block_end:
-                block_end = s.end
-                extended = True
-    return int((block_end - block_start).total_seconds() // 60)
+def _is_candidate(
+    start: datetime,
+    end: datetime,
+    venue_id: int,
+    windows: list[TimeWindow],
+    busy: list[BusySlot],
+    travel: TravelLookup,
+    now: datetime,
+) -> bool:
+    return (
+        start >= now
+        and _within_work_hours(start, end)
+        and _starts_in_any_window(start, windows)
+        and _is_reachable(start, end, venue_id, busy, travel)
+    )
 
 
-# 專程日可行時段的掃描間隔：開始時間只考慮整點與半點
-DEDICATED_STEP = timedelta(minutes=30)
-
-
-def _feasible_spans(
+def _open_spans(
     day: date,
     windows: list[TimeWindow],
     busy: list[BusySlot],
-    venue_ids: set[int],
+    venue_id: int,
     duration: timedelta,
     travel: TravelLookup,
     now: datetime,
-) -> list[TimeSpan]:
-    """當天在相關場館「真的趕得到」的時段，合併成連續區間。
-
-    以半小時為單位掃描開始時間 s：s 晚於現在、落在學生時段內、整堂在工作時段內，而且
-    至少有一個相關場館能從前一堂課趕到、下課後趕得上下一堂課（跟貼靠候選
-    用同一個 _is_reachable 判斷，查不到車程一樣視為去不了）。
-    """
-    day_start = datetime.combine(day, WORK_START)
+) -> list[tuple[datetime, datetime]]:
+    """某場館當天趕得到的連續時段 (最早開始, 最晚下課)。以半小時為單位掃描
+    開始時間，可行的開始時間連在一起就合併成一段。"""
+    spans: list[tuple[datetime, datetime]] = []
+    last_ok: datetime | None = None
+    s = datetime.combine(day, WORK_START)
     last_start = datetime.combine(day, WORK_END) - duration
-    starts: list[datetime] = []
-    s = day_start
     while s <= last_start:
-        if s >= now and _starts_in_any_window(s, windows) and any(
-            _is_reachable(s, s + duration, v, busy, travel) for v in venue_ids
-        ):
-            starts.append(s)
-        s += DEDICATED_STEP
-
-    spans: list[TimeSpan] = []
-    for s in starts:
-        if spans and s - DEDICATED_STEP <= spans[-1].last_start:
-            spans[-1] = TimeSpan(start=spans[-1].start, end=s + duration, last_start=s)
-        else:
-            spans.append(TimeSpan(start=s, end=s + duration, last_start=s))
+        if _is_candidate(s, s + duration, venue_id, windows, busy, travel, now):
+            if last_ok is not None and s - OPEN_BLOCK_STEP == last_ok:
+                spans[-1] = (spans[-1][0], s + duration)
+            else:
+                spans.append((s, s + duration))
+            last_ok = s
+        s += OPEN_BLOCK_STEP
     return spans
 
 
@@ -196,58 +179,43 @@ def find_slots(
 ) -> SlotSearchResult:
     """busy 要包含學生時段涵蓋日期內「所有場館」的占用課程，不只相關場館。"""
     duration = timedelta(minutes=duration_minutes)
-    window_dates = {w.start.date() for w in windows}
+    days = sorted({w.start.date() for w in windows})
 
-    found: dict[tuple[date, datetime, datetime, int], AnchoredCandidate] = {}
+    # 第一組：同館接課，每堂既有課程往前、往後各長出一個候選
+    found: dict[tuple[datetime, int], AnchoredCandidate] = {}
     for anchor in busy:
-        if anchor.start.date() not in window_dates:
+        if anchor.venue_id not in venue_ids or anchor.start.date() not in days:
             continue
-        for venue_id in venue_ids:
-            minutes = travel(anchor.venue_id, venue_id)
-            if minutes is None:
+        for start in (anchor.end, anchor.start - duration):
+            end = start + duration
+            if not _is_candidate(start, end, anchor.venue_id, windows, busy, travel, now):
                 continue
-            gap = timedelta(minutes=minutes)
-            after_start = anchor.end + gap
-            before_end = anchor.start - gap
-            for start, end in ((after_start, after_start + duration), (before_end - duration, before_end)):
-                if start < now:
-                    continue
-                if not _within_work_hours(start, end):
-                    continue
-                if not _starts_in_any_window(start, windows):
-                    continue
-                if not _is_reachable(start, end, venue_id, busy, travel):
-                    continue
-                cross = anchor.venue_id != venue_id
-                if cross and _contiguous_block_minutes(start, end, venue_id, busy) < MIN_CROSS_VENUE_BLOCK_MINUTES:
-                    continue
+            # 同一個時段可能被前後兩堂課同時長出來，只留一筆
+            found.setdefault(
+                (start, anchor.venue_id),
+                AnchoredCandidate(
+                    date=start.date(),
+                    start=start,
+                    end=end,
+                    venue_id=anchor.venue_id,
+                    anchor_lesson_id=anchor.lesson_id,
+                ),
+            )
+    anchored = sorted(found.values(), key=lambda c: (c.start, c.venue_id))[:MAX_ANCHORED_CANDIDATES]
 
-                key = (start.date(), start, end, venue_id)
-                existing = found.get(key)
-                # 同一個時段可能同時是同館貼靠又是跨館貼靠，保留同館的說法
-                if existing is None or (existing.cross_venue and not cross):
-                    found[key] = AnchoredCandidate(
-                        date=start.date(),
-                        start=start,
-                        end=end,
-                        venue_id=venue_id,
-                        cross_venue=cross,
-                        anchor_lesson_id=anchor.lesson_id,
-                    )
-
-    anchored = sorted(found.values(), key=lambda c: (c.cross_venue, c.start, c.venue_id))
-    # 用截斷前的完整清單判斷哪幾天有貼靠候選，免得第 6 筆以後的日期被誤當成專程日
-    days_with_anchored = {c.date for c in anchored}
-    anchored = anchored[:MAX_ANCHORED_CANDIDATES]
-
-    dedicated: list[DedicatedDate] = []
-    for day in sorted(window_dates):
-        if day < now.date() or day in days_with_anchored:
-            continue
+    # 第二組：大空檔，每個場館各自算，時段完全相同的場館合併成一筆
+    open_blocks: list[OpenBlock] = []
+    for day in days:
         today_busy = sorted((s for s in busy if s.start.date() == day), key=lambda s: s.start)
         day_windows = [w for w in windows if w.start.date() == day]
-        spans = _feasible_spans(day, day_windows, today_busy, venue_ids, duration, travel, now)
-        if spans:
-            dedicated.append(DedicatedDate(date=day, spans=spans, other_busy=today_busy))
+        grouped: dict[tuple[datetime, datetime], list[int]] = {}
+        for venue_id in sorted(venue_ids):
+            for start, end in _open_spans(day, day_windows, today_busy, venue_id, duration, travel, now):
+                if end - start >= MIN_OPEN_BLOCK:
+                    grouped.setdefault((start, end), []).append(venue_id)
+        for (start, end), ids in sorted(grouped.items()):
+            open_blocks.append(
+                OpenBlock(date=day, start=start, end=end, venue_ids=ids, other_busy=today_busy)
+            )
 
-    return SlotSearchResult(anchored=anchored, dedicated=dedicated)
+    return SlotSearchResult(anchored=anchored, open_blocks=open_blocks)

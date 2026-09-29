@@ -100,23 +100,35 @@ function busyText(list) {
     : "當天沒有其他課";
 }
 
+function durationText(startIso, endIso) {
+  const minutes = (new Date(endIso) - new Date(startIso)) / 60000;
+  return minutes % 60 === 0 ? `${minutes / 60} 小時` : `${(minutes / 60).toFixed(1)} 小時`;
+}
+
 function renderResult(result) {
-  const rows = result.anchored_candidates.map(
-    (c) => `<tr>
-      <td>${dayLabel(c.date)}</td>
-      <td>${hm(c.start)}-${hm(c.end)}</td>
-      <td>${escapeHtml(c.venue_name)}</td>
-      <td class="hint">${c.cross_venue ? "換館接課" : "同館接課"}</td>
-    </tr>`
-  );
-  result.dedicated_dates.forEach((d) => {
-    rows.push(`<tr>
-      <td>${dayLabel(d.date)}</td>
-      <td>${d.spans.map((sp) => `${hm(sp.start)}-${hm(sp.end)}`).join("、")}</td>
-      <td>—</td>
-      <td class="hint">彈性日（需專程前往）；${busyText(d.other_busy)}</td>
-    </tr>`);
-  });
+  const rows = [];
+  if (result.anchored_candidates.length) {
+    rows.push(`<tr class="group-row"><td colspan="4">第一組：同館接課（緊接既有課程，交通最省）</td></tr>`);
+    result.anchored_candidates.forEach((c) =>
+      rows.push(`<tr>
+        <td>${dayLabel(c.date)}</td>
+        <td>${hm(c.start)}-${hm(c.end)}</td>
+        <td>${escapeHtml(c.venue_name)}</td>
+        <td class="hint">同館接課</td>
+      </tr>`)
+    );
+  }
+  if (result.open_blocks.length) {
+    rows.push(`<tr class="group-row"><td colspan="4">第二組：大空檔（至少 2 小時，已算車程）</td></tr>`);
+    result.open_blocks.forEach((b) =>
+      rows.push(`<tr>
+        <td>${dayLabel(b.date)}</td>
+        <td>${hm(b.start)}-${hm(b.end)}</td>
+        <td>${b.venue_names.map(escapeHtml).join("、")}</td>
+        <td class="hint">共 ${durationText(b.start, b.end)}；${busyText(b.other_busy)}</td>
+      </tr>`)
+    );
+  }
   document.getElementById("candidate-list").innerHTML =
     rows.join("") || `<tr><td colspan="4" class="hint">沒有候選時段</td></tr>`;
 

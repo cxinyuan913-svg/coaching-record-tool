@@ -420,8 +420,14 @@ details table {
   width: 90px;
 }
 
-/* 找空檔結果表：日期、時段、場館不換行，說明欄吃剩下的寬度 */
-#result-block th:nth-child(-n + 3),
-#candidate-list td:nth-child(-n + 3) {
+/* 找空檔結果表：日期、時段不換行，場館跟說明欄吃剩下的寬度 */
+#result-block th:nth-child(-n + 2),
+#candidate-list td:nth-child(-n + 2) {
   white-space: nowrap;
+}
+
+#candidate-list tr.group-row td {
+  background: #eef0f4;
+  font-weight: 600;
+  font-size: 13px;
 }

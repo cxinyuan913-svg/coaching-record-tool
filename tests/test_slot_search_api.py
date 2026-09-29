@@ -46,8 +46,17 @@ def test_anchored_candidates_and_student_facing_message(api):
     assert res.status_code == 200, res.text
     body = res.json()
     assert [(c["start"], c["venue_name"]) for c in body["anchored_candidates"]] == [("2030-01-07T19:00:00", "動智館")]
-    # 給學生看的訊息不能有「貼靠」「專程」「既有課程」這類內部用語
-    assert body["message"] == "我這幾個時段可以：\n・1/7(一) 19:00-20:00 動智館"
+    assert [(b["start"], b["end"], b["venue_names"]) for b in body["open_blocks"]] == [
+        ("2030-01-07T19:00:00", "2030-01-07T22:30:00", ["動智館"])
+    ]
+    # 給學生看的訊息不能有「接課」「空檔」「既有課程」這類內部用語
+    assert body["message"] == (
+        "我這幾個時段最方便：\n"
+        "・1/7(一) 19:00-20:00 動智館\n"
+        "\n"
+        "其他有空的時段（場館可以選）：\n"
+        "・1/7(一) 19:00-22:30 動智館"
+    )
 
 
 def test_leave_and_cancelled_free_the_slot(api):
@@ -61,15 +70,16 @@ def test_leave_and_cancelled_free_the_slot(api):
     assert starts == ["17:00", "19:00"]
 
 
-def test_flexible_days_listed_with_time_spans(api):
-    v = create_venue(api)["id"]
-    body = search(api, [v], date_to=date(2030, 1, 8), time_from="18:00", time_to="22:00", duration_minutes=120).json()
+def test_open_blocks_merge_venues_across_days(api):
+    a = create_venue(api, "A館")["id"]
+    b = create_venue(api, "B館")["id"]
+    body = search(api, [a, b], date_to=date(2030, 1, 8), time_from="18:00", time_to="22:00", duration_minutes=120).json()
     assert body["anchored_candidates"] == []
-    # 開始時間 18:00-21:30 都可以，但兩小時的課最晚 22:30 下課
+    # 開始時間 18:00-20:30 都可以，兩小時的課最晚 22:30 下課；兩館時段相同合併成一行
     assert body["message"] == (
-        "這幾天比較彈性，時間可以再討論：\n"
-        "・1/7(一) 18:00-22:30\n"
-        "・1/8(二) 18:00-22:30"
+        "其他有空的時段（場館可以選）：\n"
+        "・1/7(一) 18:00-22:30 A館、B館\n"
+        "・1/8(二) 18:00-22:30 A館、B館"
     )
 
 
