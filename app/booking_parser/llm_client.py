@@ -24,15 +24,17 @@ API_KEY_FILE = Path(__file__).resolve().parent.parent.parent / "anthropic_api_ke
 
 
 def load_api_key() -> str | None:
-    """環境變數 ANTHROPIC_API_KEY 優先，其次讀 anthropic_api_key.txt。每次建立
-    client 時才讀，所以放好或更換檔案後不用重開伺服器。"""
+    """環境變數 ANTHROPIC_API_KEY 優先，其次讀 anthropic_api_key.txt 的第一個
+    非空白行。每次建立 client 時才讀，所以放好或更換檔案後不用重開伺服器。"""
     env_value = os.environ.get("ANTHROPIC_API_KEY")
     if env_value:
         return env_value.strip()
     if API_KEY_FILE.exists():
-        content = API_KEY_FILE.read_text(encoding="utf-8-sig").strip()
-        if content:
-            return content
+        # 只取第一個非空白行：記事本貼上時很容易多帶到空行或其他文字，整段
+        # 送出會變成不合法的 HTTP 標頭（h11 LocalProtocolError）
+        for line in API_KEY_FILE.read_text(encoding="utf-8-sig").splitlines():
+            if line.strip():
+                return line.strip()
     return None
 # 對應 app/booking_parser/prompts/extract_v1.md；改 prompt 就開新版本、
 # 新檔案，不要覆蓋舊的（見該檔案開頭的說明：舊的抽取/評測紀錄都對應著

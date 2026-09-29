@@ -57,8 +57,8 @@ def test_沒設定ANTHROPIC_API_KEY時回傳清楚的錯誤訊息而不是不知
 
 def test_API_key可以從專案資料夾的檔案讀取_環境變數優先(monkeypatch, tmp_path):
     key_file = tmp_path / "anthropic_api_key.txt"
-    # 記事本存檔可能帶 BOM 跟換行，都要能正確去掉
-    key_file.write_bytes(b"\xef\xbb\xbfsk-ant-from-file\r\n")
+    # 記事本常見狀況：BOM、多餘空行、不小心多貼到的文字，都只取第一個非空白行
+    key_file.write_bytes(b"\xef\xbb\xbf\r\n  sk-ant-from-file \r\n\r\n.extra-text")
     monkeypatch.setattr(llm_client, "API_KEY_FILE", key_file)
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
