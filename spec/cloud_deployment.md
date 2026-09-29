@@ -81,18 +81,33 @@ sudo usermod -aG docker $USER
 還沒推到 GitHub，也可以直接用 `scp` 把整個資料夾（不含 `venv/`）傳
 上去。**特別注意：`coaching.db`、`booking_api_token.txt`、
 `public_booking_api_token.txt`、`discord_webhook_url.txt`、
-`scheduler_state.json` 這五個檔案要一起帶上去**——不是重新建立空的，
-是把你現在本機真實在用的那幾份複製過去，不然資料會整個歸零。
+`scheduler_state.json`、`admin_password_hash.txt`、`session_secret.txt`
+這七個檔案要一起帶上去**——不是重新建立空的，是把你現在本機真實在用
+的那幾份複製過去，不然資料會整個歸零、也登入不了。
+
+後兩個是網站登入用的（見 `app/web_auth.py`）：網站放上網路一定要有登入，
+不然知道網址的人都能看到、修改學生資料。上傳前先確認本機已經設過密碼
+（專案資料夾裡有這兩個檔案）；沒有的話先在本機執行
+`python -m app.set_password` 設定。**這七個檔案一定要先存在再啟動
+容器**：Docker 掛載不存在的檔案時會自動建成「資料夾」，程式就讀不到了。
 
 ```bash
 # 在 VPS 上
 git clone <你的 repo 位址> coaching-record-tool
 cd coaching-record-tool
 
-# 在本機電腦（另開一個終端機），把五個真實資料檔案傳上去
+# 在本機電腦（另開一個終端機），把七個真實資料檔案傳上去
 scp coaching.db booking_api_token.txt public_booking_api_token.txt \
     discord_webhook_url.txt scheduler_state.json \
+    admin_password_hash.txt session_secret.txt \
     coach@<VPS的IP>:~/coaching-record-tool/
+```
+
+要換密碼時，在 VPS 上執行（不用重開容器，下一次登入就生效，所有裝置
+都要重新登入）：
+
+```bash
+docker compose -f docker-compose.cloud.yml exec coaching-record-tool python -m app.set_password
 ```
 
 ## 步驟七：設定網域、啟動服務
@@ -144,7 +159,7 @@ docker compose -f docker-compose.cloud.yml up -d --build
 # （容器預設是 1000，可以用這行確認）
 docker compose -f docker-compose.cloud.yml exec coaching-record-tool id appuser
 sudo chown 1000:1000 coaching.db booking_api_token.txt public_booking_api_token.txt \
-    discord_webhook_url.txt scheduler_state.json
+    discord_webhook_url.txt scheduler_state.json admin_password_hash.txt session_secret.txt
 
 # 方法二：改用 root 執行（單人小工具、機器只有你在用，風險可接受的話
 # 這樣最省事）——把 Dockerfile 裡 `RUN useradd --create-home appuser` 跟

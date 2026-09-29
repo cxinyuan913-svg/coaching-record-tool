@@ -7,12 +7,6 @@ docstring_parser==0.18.0
 fastapi==0.141.1
 greenlet==3.5.5
 h11==0.16.0
-# httpx2 是這個開發環境（Claude Code 的程式碼沙盒）把 httpx 整組換掉
-# 名稱後的版本，只有在這裡開發/測試時裝得到。真的要部署到 VPS／Docker
-# 時，這一行要換成正常的 `httpx`（anthropic SDK 實際依賴的套件名稱），
-# 並且改用 `pip install anthropic` 在真實環境重新解析出正確的版本號，
-# 不要直接照抄這個檔案裡 anthropic 的版本號——這裡的版本號是這個沙盒
-# 環境解析出來的，不保證等於 PyPI 上真實發布的版本。
 httpx2==2.13.0
 idna==3.19
 jiter==0.17.0

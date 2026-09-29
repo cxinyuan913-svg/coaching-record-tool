@@ -431,3 +431,24 @@ details table {
   font-weight: 600;
   font-size: 13px;
 }
+
+/* 登入頁 */
+.login-main {
+  max-width: 360px;
+  margin-top: 12vh;
+}
+
+.login-panel h1 {
+  margin-top: 0;
+}
+
+.login-panel button {
+  width: 100%;
+  padding: 10px;
+  font-size: 15px;
+}
+
+/* 導覽列右側的登出 */
+nav.topnav a.nav-logout {
+  margin-left: auto;
+}

@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app import models  # noqa: F401  匯入以註冊 ORM models 到 Base.metadata
-from app import scheduler
+from app import scheduler, web_auth
 from app.database import Base, SessionLocal, engine, ensure_schema_migrations
 from app.routers import (
     adjustments,
@@ -33,6 +33,10 @@ with SessionLocal() as db:
     seed_price_rules(db)
 
 app = FastAPI(title="羽球教練紀錄工具")
+
+# 全站都要登入（登入頁、健康檢查、外部系統介接端點除外，見 app/web_auth.py）
+app.middleware("http")(web_auth.require_login)
+app.include_router(web_auth.router)
 
 app.include_router(venues.router)
 app.include_router(price_rules.router)

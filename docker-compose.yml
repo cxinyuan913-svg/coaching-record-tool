@@ -17,3 +17,5 @@ services:
       - ./public_booking_api_token.txt:/app/public_booking_api_token.txt
       - ./discord_webhook_url.txt:/app/discord_webhook_url.txt
       - ./scheduler_state.json:/app/scheduler_state.json
+      - ./admin_password_hash.txt:/app/admin_password_hash.txt
+      - ./session_secret.txt:/app/session_secret.txt

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登入 - 羽球教練紀錄工具</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <main class="login-main">
+    <form class="panel login-panel" id="login-form">
+      <h1>羽球教練紀錄工具</h1>
+      <div class="form-row">
+        <label for="f-password">密碼</label>
+        <input id="f-password" type="password" autocomplete="current-password" required autofocus />
+      </div>
+      <button type="submit" id="btn-login">登入</button>
+      <p class="hint" id="login-status"></p>
+    </form>
+  </main>
+
+  <script>
+    // 登入頁不載入 common.js：common.js 遇到 401 會導回登入頁，這裡不需要
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const status = document.getElementById("login-status");
+      const button = document.getElementById("btn-login");
+      button.disabled = true;
+      status.textContent = "";
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: document.getElementById("f-password").value }),
+        });
+        if (res.ok) {
+          window.location.href = "/";
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        status.textContent = data.detail || "登入失敗";
+      } catch (err) {
+        status.textContent = "連不上伺服器";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

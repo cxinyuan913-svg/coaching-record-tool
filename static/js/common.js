@@ -15,6 +15,11 @@ async function apiRequest(method, url, body) {
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  // 登入過期（或還沒登入）時 API 回 401，直接帶回登入頁
+  if (res.status === 401) {
+    window.location.href = "/login.html";
+    throw new Error("請先登入");
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -133,7 +138,24 @@ function highlightActiveNav() {
   });
 }
 
+// 導覽列右側加「登出」，不用每個頁面各自改 HTML
+function addLogoutLink() {
+  const nav = document.querySelector("nav.topnav");
+  if (!nav) return;
+  const link = document.createElement("a");
+  link.href = "#";
+  link.textContent = "登出";
+  link.className = "nav-logout";
+  link.addEventListener("click", async (e) => {
+    e.preventDefault();
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login.html";
+  });
+  nav.appendChild(link);
+}
+
 document.addEventListener("DOMContentLoaded", highlightActiveNav);
+document.addEventListener("DOMContentLoaded", addLogoutLink);
 
 // 數字輸入框聚焦時，滑鼠滾輪滾動頁面會被瀏覽器當成「調整數值」，容易滑到
 // 一半不小心把金額改掉（例如輸入 500 捲動頁面變成 498）；滾動時讓數字

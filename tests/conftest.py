@@ -13,22 +13,39 @@ import pytest
 _tmp_dir = tempfile.mkdtemp(prefix="coaching_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_tmp_dir, 'test_coaching.db')}"
 os.environ["SCHEDULER_STATE_FILE"] = os.path.join(_tmp_dir, "scheduler_state.json")
+# 登入密碼跟簽章金鑰也指到暫存目錄，不會讀到、蓋掉教練真實的設定
+os.environ["ADMIN_PASSWORD_HASH_FILE"] = os.path.join(_tmp_dir, "admin_password_hash.txt")
+os.environ["SESSION_SECRET_FILE"] = os.path.join(_tmp_dir, "session_secret.txt")
+
+TEST_PASSWORD = "test-password-123"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app import web_auth  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import seed_price_rules  # noqa: E402
 
+web_auth.PASSWORD_HASH_FILE.write_text(web_auth.hash_password(TEST_PASSWORD), encoding="utf-8")
+
 
 @pytest.fixture()
-def client():
-    """每個測試都拿到一份乾淨的資料庫（只有預設價目表），跟真實資料完全隔離。"""
+def anon_client():
+    """乾淨的資料庫（只有預設價目表），但還沒登入。測登入機制本身用。"""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_price_rules(db)
+    web_auth.reset_failures()
     return TestClient(app)
+
+
+@pytest.fixture()
+def client(anon_client):
+    """每個測試都拿到一份乾淨的資料庫、已經登入的 client，跟真實資料完全隔離。"""
+    res = anon_client.post("/api/auth/login", json={"password": TEST_PASSWORD})
+    assert res.status_code == 204, res.text
+    return anon_client
 
 
 def create_student(client: TestClient, tier: str = "new", name: str = "測試學生") -> dict:
