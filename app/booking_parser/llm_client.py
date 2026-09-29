@@ -16,6 +16,24 @@ from typing import Protocol
 from app.booking_parser.schemas import ParsedBookingRequest
 
 PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
+
+# 本機把 key 放在專案目錄下不進版控的檔案（見 .gitignore），不要用 setx 設成
+# 全域環境變數：Claude Code 也會讀 ANTHROPIC_API_KEY，設成全域會蓋掉訂閱制
+# 登入。雲端 Docker 容器裡沒有這個問題，照舊可以用環境變數。
+API_KEY_FILE = Path(__file__).resolve().parent.parent.parent / "anthropic_api_key.txt"
+
+
+def load_api_key() -> str | None:
+    """環境變數 ANTHROPIC_API_KEY 優先，其次讀 anthropic_api_key.txt。每次建立
+    client 時才讀，所以放好或更換檔案後不用重開伺服器。"""
+    env_value = os.environ.get("ANTHROPIC_API_KEY")
+    if env_value:
+        return env_value.strip()
+    if API_KEY_FILE.exists():
+        content = API_KEY_FILE.read_text(encoding="utf-8-sig").strip()
+        if content:
+            return content
+    return None
 # 對應 app/booking_parser/prompts/extract_v1.md；改 prompt 就開新版本、
 # 新檔案，不要覆蓋舊的（見該檔案開頭的說明：舊的抽取/評測紀錄都對應著
 # 某個 prompt 版本，覆蓋會讓舊紀錄失去對照意義）。
@@ -58,9 +76,12 @@ class AnthropicExtractionClient:
     def __init__(self, api_key: str | None = None, model: str | None = None):
         import anthropic  # 延遲 import：沒裝這個套件、也沒用到這個 client 的地方不會壞
 
-        resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        resolved_key = api_key or load_api_key()
         if not resolved_key:
-            raise RuntimeError("尚未設定 ANTHROPIC_API_KEY 環境變數")
+            raise RuntimeError(
+                "尚未設定 Anthropic API key：請在專案資料夾建立 anthropic_api_key.txt"
+                "（內容只有 key 一行），或設定 ANTHROPIC_API_KEY 環境變數"
+            )
         self._client = anthropic.Anthropic(api_key=resolved_key)
         self.model = model or os.environ.get("LLM_MODEL", "claude-sonnet-5")
         self.last_latency_ms: int | None = None

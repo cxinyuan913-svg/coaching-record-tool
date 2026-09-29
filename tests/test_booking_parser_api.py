@@ -2,6 +2,7 @@
 條件）。用 FastAPI 的 dependency override 換掉真正的 Anthropic client，
 不會真的打 API、也不需要 ANTHROPIC_API_KEY。
 """
+from app.booking_parser import llm_client
 from app.main import app
 from app.routers import booking_parser
 
@@ -45,8 +46,27 @@ def test_parse端點對驗證失敗的訊息回傳needs_review而不是500錯誤
         app.dependency_overrides.pop(booking_parser.get_extraction_client, None)
 
 
-def test_沒設定ANTHROPIC_API_KEY時回傳清楚的錯誤訊息而不是不知所云的例外(client, monkeypatch):
+def test_沒設定ANTHROPIC_API_KEY時回傳清楚的錯誤訊息而不是不知所云的例外(client, monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # 指向不存在的檔案，免得讀到教練本機真的放好的 anthropic_api_key.txt
+    monkeypatch.setattr(llm_client, "API_KEY_FILE", tmp_path / "anthropic_api_key.txt")
     res = client.post("/api/booking-requests/parse", json={"text": "隨便一句話"})
     assert res.status_code == 500
-    assert "ANTHROPIC_API_KEY" in res.json()["detail"]
+    assert "anthropic_api_key.txt" in res.json()["detail"]
+
+
+def test_API_key可以從專案資料夾的檔案讀取_環境變數優先(monkeypatch, tmp_path):
+    key_file = tmp_path / "anthropic_api_key.txt"
+    # 記事本存檔可能帶 BOM 跟換行，都要能正確去掉
+    key_file.write_bytes(b"\xef\xbb\xbfsk-ant-from-file\r\n")
+    monkeypatch.setattr(llm_client, "API_KEY_FILE", key_file)
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert llm_client.load_api_key() == "sk-ant-from-file"
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-from-env")
+    assert llm_client.load_api_key() == "sk-ant-from-env"
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    key_file.unlink()
+    assert llm_client.load_api_key() is None
