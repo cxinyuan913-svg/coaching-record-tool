@@ -142,3 +142,37 @@ def test_no_dedicated_when_day_has_anchored_candidate_or_no_free_gap():
     # 空檔不夠一整堂：20:00 以後才空，但兩小時的課會超過 22:30
     r = run([busy(C, at(17), at(21))], {A}, duration=120, windows=evening)
     assert r.dedicated == []
+
+
+def dspans(result):
+    return {
+        d.date.isoformat(): [(sp.start.strftime("%H:%M"), sp.end.strftime("%H:%M")) for sp in d.spans]
+        for d in result.dedicated
+    }
+
+
+def test_dedicated_day_fully_free_is_one_whole_day_span():
+    r = run([], {A})
+    assert dspans(r) == {"2026-10-06": [("08:00", "22:30")]}
+
+
+def test_dedicated_spans_include_travel_from_other_area():
+    # 真實案例 10/4：白天在新竹（這裡用 B，車程 77 分鐘）上課到 19:00，
+    # 台北（A）只有 20:30 以後趕得到；14:00-16:00 的空檔來回車程不夠
+    far = make_travel_lookup({(A, B): 77})
+    busy_slots = [busy(B, at(8), at(14)), busy(B, at(16), at(19))]
+    r = find_slots(busy=busy_slots, windows=WHOLE_DAY, venue_ids={A},
+                   duration_minutes=60, travel=far, now=NOW)
+    assert r.anchored == []
+    assert dspans(r) == {"2026-10-06": [("20:30", "22:30")]}
+
+
+def test_dedicated_needs_known_travel_time():
+    # 當天在 C 館有課，C 跟 A 沒有車程資料 → 前後都視為趕不到，不列專程
+    r = run([busy(C, at(10), at(11))], {A})
+    assert r.dedicated == []
+
+
+def test_dedicated_skips_start_times_already_past():
+    r = run([], {A}, now=at(15, 10))
+    assert dspans(r) == {"2026-10-06": [("15:30", "22:30")]}

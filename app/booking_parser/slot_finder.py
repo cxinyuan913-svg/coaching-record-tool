@@ -51,11 +51,21 @@ class AnchoredCandidate(BaseModel):
     anchor_lesson_id: int
 
 
+class TimeSpan(BaseModel):
+    """一段可以上課的連續時段：開始時間可以落在 start 到 last_start 之間，
+    最晚在 end 下課。"""
+
+    start: datetime
+    end: datetime
+    last_start: datetime
+
+
 class DedicatedDate(BaseModel):
-    """專程候選：學生時段內沒有貼靠候選、但有足夠空檔的日期。只列日期，時段
-    由教練自己決定。"""
+    """專程候選：當天沒有貼靠候選，但有真的趕得到的空檔。列出可行時段，
+    實際幾點由教練跟學生再談。"""
 
     date: date
+    spans: list[TimeSpan]  # 可行時段（已算車程），可能不只一段
     other_busy: list[BusySlot]  # 當天已占用的時段（不限場館），給教練參考
 
 
@@ -136,27 +146,43 @@ def _contiguous_block_minutes(start: datetime, end: datetime, venue_id: int, bus
     return int((block_end - block_start).total_seconds() // 60)
 
 
-def _has_free_gap(
-    day: date, windows: list[TimeWindow], busy: list[BusySlot], duration: timedelta, now: datetime
-) -> bool:
-    """學生時段內能不能塞進一整堂課：存在某個開始時間 s 落在學生時段內，且
-    [s, s+時長] 在工作時段內、晚於現在、不跟任何既有課程重疊。專程候選的場館
-    還沒決定，所以這裡不算車程，由教練自己判斷。"""
-    free_start = max(datetime.combine(day, WORK_START), now)
-    day_end = datetime.combine(day, WORK_END)
-    free_intervals: list[tuple[datetime, datetime]] = []
-    for slot in sorted(busy, key=lambda s: s.start):
-        if slot.start > free_start:
-            free_intervals.append((free_start, min(slot.start, day_end)))
-        free_start = max(free_start, slot.end)
-    free_intervals.append((free_start, day_end))
+# 專程日可行時段的掃描間隔：開始時間只考慮整點與半點
+DEDICATED_STEP = timedelta(minutes=30)
 
-    for a, b in free_intervals:
-        for w in windows:
-            start = max(a, w.start)
-            if start < w.end and start + duration <= b:
-                return True
-    return False
+
+def _feasible_spans(
+    day: date,
+    windows: list[TimeWindow],
+    busy: list[BusySlot],
+    venue_ids: set[int],
+    duration: timedelta,
+    travel: TravelLookup,
+    now: datetime,
+) -> list[TimeSpan]:
+    """當天在相關場館「真的趕得到」的時段，合併成連續區間。
+
+    以半小時為單位掃描開始時間 s：s 晚於現在、落在學生時段內、整堂在工作時段內，而且
+    至少有一個相關場館能從前一堂課趕到、下課後趕得上下一堂課（跟貼靠候選
+    用同一個 _is_reachable 判斷，查不到車程一樣視為去不了）。
+    """
+    day_start = datetime.combine(day, WORK_START)
+    last_start = datetime.combine(day, WORK_END) - duration
+    starts: list[datetime] = []
+    s = day_start
+    while s <= last_start:
+        if s >= now and _starts_in_any_window(s, windows) and any(
+            _is_reachable(s, s + duration, v, busy, travel) for v in venue_ids
+        ):
+            starts.append(s)
+        s += DEDICATED_STEP
+
+    spans: list[TimeSpan] = []
+    for s in starts:
+        if spans and s - DEDICATED_STEP <= spans[-1].last_start:
+            spans[-1] = TimeSpan(start=spans[-1].start, end=s + duration, last_start=s)
+        else:
+            spans.append(TimeSpan(start=s, end=s + duration, last_start=s))
+    return spans
 
 
 def find_slots(
@@ -220,7 +246,8 @@ def find_slots(
             continue
         today_busy = sorted((s for s in busy if s.start.date() == day), key=lambda s: s.start)
         day_windows = [w for w in windows if w.start.date() == day]
-        if _has_free_gap(day, day_windows, today_busy, duration, now):
-            dedicated.append(DedicatedDate(date=day, other_busy=today_busy))
+        spans = _feasible_spans(day, day_windows, today_busy, venue_ids, duration, travel, now)
+        if spans:
+            dedicated.append(DedicatedDate(date=day, spans=spans, other_busy=today_busy))
 
     return SlotSearchResult(anchored=anchored, dedicated=dedicated)
