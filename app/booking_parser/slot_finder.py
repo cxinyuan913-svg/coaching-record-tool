@@ -5,8 +5,8 @@
 撈資料跟組訊息文字是 slot_search.py 的工作。
 
 - 第一組「同館接課」：緊接在既有課程前後、同一個場館的具體時段，交通最省。
-- 第二組「大空檔」：每個場館各自算出趕得到的連續空檔（至少 2 小時），時段
-  相同的場館合併成一筆。
+- 第二組「大空檔」：每個場館各自算出趕得到的連續空檔（整點開始、至少 2
+  小時），同一天時段重疊的場館合併成一筆，時段取大家都可以的共同範圍。
 
 車程的用法：教練同一時間只有一個人，候選時段前後最接近的那兩堂課（不限
 場館）決定他來不來得及到場、來不來得及離開。只看「最接近的前一堂 / 後一堂」
@@ -26,8 +26,11 @@ MAX_ANCHORED_CANDIDATES = 5
 # 大空檔至少要多長才列出（從最早開始到最晚下課）
 MIN_OPEN_BLOCK = timedelta(hours=2)
 
-# 大空檔的掃描間隔：開始時間只考慮整點與半點
-OPEN_BLOCK_STEP = timedelta(minutes=30)
+# 大空檔的掃描間隔：開始時間只考慮整點（教練要求，訊息比較好讀）
+OPEN_BLOCK_STEP = timedelta(hours=1)
+
+# 不同場館的大空檔，開始、結束時間都相差在這個範圍內才合併成一行
+MERGE_TOLERANCE = timedelta(hours=1)
 
 # travel(a, b) → 分鐘；同場館回 0；查不到回 None（代表不可銜接）
 TravelLookup = Callable[[int, int], int | None]
@@ -151,7 +154,7 @@ def _open_spans(
     travel: TravelLookup,
     now: datetime,
 ) -> list[tuple[datetime, datetime]]:
-    """某場館當天趕得到的連續時段 (最早開始, 最晚下課)。以半小時為單位掃描
+    """某場館當天趕得到的連續時段 (最早開始, 最晚下課)。以整點為單位掃描
     開始時間，可行的開始時間連在一起就合併成一段。"""
     spans: list[tuple[datetime, datetime]] = []
     last_ok: datetime | None = None
@@ -166,6 +169,33 @@ def _open_spans(
             last_ok = s
         s += OPEN_BLOCK_STEP
     return spans
+
+
+def _merge_overlapping(
+    spans: list[tuple[datetime, datetime, int]],
+) -> list[tuple[datetime, datetime, list[int]]]:
+    """同一天的各場館空檔，時段差不多的合併成一筆：場館取聯集，時段取大家都
+    可以的共同範圍（交集）。
+
+    例：三蘆 16:00-22:00、快羽/森域/海龍王 17:00-22:00 → 17:00-22:00 四個館。
+    教練要求的取捨：訊息短比較重要，三蘆多出來的 16:00 那一小時不另外列。
+    但開始或結束相差超過 MERGE_TOLERANCE 就不合併（例如 08:00-12:00 跟
+    10:00-12:00 合併會讓前者少掉一半），交集不到 MIN_OPEN_BLOCK 也不合併。
+    """
+    merged: list[tuple[datetime, datetime, list[int]]] = []
+    for start, end, venue_id in sorted(spans):
+        if merged:
+            m_start, m_end, ids = merged[-1]
+            common_start, common_end = max(m_start, start), min(m_end, end)
+            if (
+                abs(m_start - start) <= MERGE_TOLERANCE
+                and abs(m_end - end) <= MERGE_TOLERANCE
+                and common_end - common_start >= MIN_OPEN_BLOCK
+            ):
+                merged[-1] = (common_start, common_end, sorted(ids + [venue_id]))
+                continue
+        merged.append((start, end, [venue_id]))
+    return merged
 
 
 def find_slots(
@@ -203,17 +233,17 @@ def find_slots(
             )
     anchored = sorted(found.values(), key=lambda c: (c.start, c.venue_id))[:MAX_ANCHORED_CANDIDATES]
 
-    # 第二組：大空檔，每個場館各自算，時段完全相同的場館合併成一筆
+    # 第二組：大空檔，每個場館各自算，再把同一天重疊的合併
     open_blocks: list[OpenBlock] = []
     for day in days:
         today_busy = sorted((s for s in busy if s.start.date() == day), key=lambda s: s.start)
         day_windows = [w for w in windows if w.start.date() == day]
-        grouped: dict[tuple[datetime, datetime], list[int]] = {}
+        per_venue: list[tuple[datetime, datetime, int]] = []
         for venue_id in sorted(venue_ids):
             for start, end in _open_spans(day, day_windows, today_busy, venue_id, duration, travel, now):
                 if end - start >= MIN_OPEN_BLOCK:
-                    grouped.setdefault((start, end), []).append(venue_id)
-        for (start, end), ids in sorted(grouped.items()):
+                    per_venue.append((start, end, venue_id))
+        for start, end, ids in _merge_overlapping(per_venue):
             open_blocks.append(
                 OpenBlock(date=day, start=start, end=end, venue_ids=ids, other_busy=today_busy)
             )

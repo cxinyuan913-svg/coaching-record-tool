@@ -119,7 +119,7 @@ function renderResult(result) {
     );
   }
   if (result.open_blocks.length) {
-    rows.push(`<tr class="group-row"><td colspan="4">第二組：大空檔（至少 2 小時，已算車程）</td></tr>`);
+    rows.push(`<tr class="group-row"><td colspan="4">第二組：大空檔（整點開始、至少 2 小時，已算車程）</td></tr>`);
     result.open_blocks.forEach((b) =>
       rows.push(`<tr>
         <td>${dayLabel(b.date)}</td>
