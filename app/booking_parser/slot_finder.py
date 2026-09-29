@@ -52,10 +52,11 @@ class AnchoredCandidate(BaseModel):
 
 
 class DedicatedDate(BaseModel):
-    """專程候選：當天在相關場館沒有任何課程，只列日期，時段由教練自己決定。"""
+    """專程候選：學生時段內沒有貼靠候選、但有足夠空檔的日期。只列日期，時段
+    由教練自己決定。"""
 
     date: date
-    other_busy: list[BusySlot]  # 當天在其他場館已占用的時段，給教練參考
+    other_busy: list[BusySlot]  # 當天已占用的時段（不限場館），給教練參考
 
 
 class SlotSearchResult(BaseModel):
@@ -135,6 +136,29 @@ def _contiguous_block_minutes(start: datetime, end: datetime, venue_id: int, bus
     return int((block_end - block_start).total_seconds() // 60)
 
 
+def _has_free_gap(
+    day: date, windows: list[TimeWindow], busy: list[BusySlot], duration: timedelta, now: datetime
+) -> bool:
+    """學生時段內能不能塞進一整堂課：存在某個開始時間 s 落在學生時段內，且
+    [s, s+時長] 在工作時段內、晚於現在、不跟任何既有課程重疊。專程候選的場館
+    還沒決定，所以這裡不算車程，由教練自己判斷。"""
+    free_start = max(datetime.combine(day, WORK_START), now)
+    day_end = datetime.combine(day, WORK_END)
+    free_intervals: list[tuple[datetime, datetime]] = []
+    for slot in sorted(busy, key=lambda s: s.start):
+        if slot.start > free_start:
+            free_intervals.append((free_start, min(slot.start, day_end)))
+        free_start = max(free_start, slot.end)
+    free_intervals.append((free_start, day_end))
+
+    for a, b in free_intervals:
+        for w in windows:
+            start = max(a, w.start)
+            if start < w.end and start + duration <= b:
+                return True
+    return False
+
+
 def find_slots(
     *,
     busy: list[BusySlot],
@@ -186,15 +210,17 @@ def find_slots(
                     )
 
     anchored = sorted(found.values(), key=lambda c: (c.cross_venue, c.start, c.venue_id))
+    # 用截斷前的完整清單判斷哪幾天有貼靠候選，免得第 6 筆以後的日期被誤當成專程日
+    days_with_anchored = {c.date for c in anchored}
     anchored = anchored[:MAX_ANCHORED_CANDIDATES]
 
     dedicated: list[DedicatedDate] = []
     for day in sorted(window_dates):
-        if day < now.date():
+        if day < now.date() or day in days_with_anchored:
             continue
         today_busy = sorted((s for s in busy if s.start.date() == day), key=lambda s: s.start)
-        if any(s.venue_id in venue_ids for s in today_busy):
-            continue
-        dedicated.append(DedicatedDate(date=day, other_busy=today_busy))
+        day_windows = [w for w in windows if w.start.date() == day]
+        if _has_free_gap(day, day_windows, today_busy, duration, now):
+            dedicated.append(DedicatedDate(date=day, other_busy=today_busy))
 
     return SlotSearchResult(anchored=anchored, dedicated=dedicated)

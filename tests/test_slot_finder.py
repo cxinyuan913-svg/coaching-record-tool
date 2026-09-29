@@ -118,3 +118,27 @@ def test_sorted_same_venue_first_and_capped_at_five():
     assert all(not c.cross_venue for c in r.anchored)
     starts = [c.start for c in r.anchored]
     assert starts == sorted(starts)
+
+
+def test_dedicated_when_student_window_free_even_if_day_has_other_lessons():
+    # 真實案例：當天白天有課，學生要的晚上整段空著 → 要列專程，不能說排不進去
+    morning = busy(A, at(10), at(12))
+    afternoon = busy(B, at(13, 30), at(15, 30))
+    evening = [TimeWindow(start=at(18), end=at(22))]
+    r = run([morning, afternoon], {A, B}, windows=evening)
+    assert r.anchored == []
+    assert [d.date for d in r.dedicated] == [at(0).date()]
+    assert r.dedicated[0].other_busy == [morning, afternoon]
+
+
+def test_no_dedicated_when_day_has_anchored_candidate_or_no_free_gap():
+    # 當天已經有貼靠候選 → 不重複列專程
+    r = run([busy(A, at(18), at(19))], {A})
+    assert r.anchored and r.dedicated == []
+    # 學生時段被塞滿（別館的課也算）→ 沒有空檔，不列專程
+    evening = [TimeWindow(start=at(18), end=at(22))]
+    r = run([busy(C, at(17), at(22, 30))], {A}, windows=evening)
+    assert r.anchored == [] and r.dedicated == []
+    # 空檔不夠一整堂：20:00 以後才空，但兩小時的課會超過 22:30
+    r = run([busy(C, at(17), at(21))], {A}, duration=120, windows=evening)
+    assert r.dedicated == []

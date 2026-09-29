@@ -130,7 +130,7 @@ def test_dedicated_day_message_uses_student_window(api):
     rid = add_request([evening()])
     body = api.post(f"/api/booking-requests/{rid}/suggest").json()
     assert body["anchored_candidates"] == []
-    assert body["message"] == "專程候選（該日目前沒有其他排課）：\n・1/7(一) 18:00-22:00 之間可談，需自行決定時段"
+    assert body["message"] == "專程候選（需要專程前往）：\n・1/7(一) 18:00-22:00 之間可談，需自行決定時段"
 
     rid = add_request([whole_day()])
     assert "全天可談" in api.post(f"/api/booking-requests/{rid}/suggest").json()["message"]

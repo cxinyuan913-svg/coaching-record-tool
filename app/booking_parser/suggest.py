@@ -100,7 +100,7 @@ def build_message(
             lines.append(f"・{_fmt_day(c.date)} {_fmt_hm(c.start)}-{_fmt_hm(c.end)}，{c.venue_name}（{reason}）")
         sections.append("\n".join(lines))
     if dedicated:
-        lines = ["專程候選（該日目前沒有其他排課）："]
+        lines = ["專程候選（需要專程前往）："]
         for d in dedicated:
             lines.append(f"・{_fmt_day(d.date)} {_day_range_text(d.date, windows)}，需自行決定時段")
         sections.append("\n".join(lines))
