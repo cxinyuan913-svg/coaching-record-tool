@@ -1,7 +1,9 @@
 """FastAPI 進入點。"""
+import logging
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
@@ -55,6 +57,17 @@ app.include_router(slot_search.router)
 # drop_all/create_all 互相干擾，也避免測試過程真的打出 Discord 通知
 if "DATABASE_URL" not in os.environ:
     scheduler.start_scheduler()
+
+
+@app.exception_handler(Exception)
+async def unhandled_error(request: Request, exc: Exception):
+    """沒被處理的例外也回 JSON {"detail": ...}（預設是純文字 Internal Server Error），
+    前端跟自動訂場排程才能一致地判斷錯誤；完整錯誤堆疊照樣寫進伺服器紀錄。"""
+    logging.getLogger("app").exception("未處理的錯誤：%s %s", request.method, request.url.path)
+    return JSONResponse(
+        {"detail": f"伺服器內部錯誤（{type(exc).__name__}），請查看伺服器紀錄"},
+        status_code=500,
+    )
 
 
 @app.get("/api/health")

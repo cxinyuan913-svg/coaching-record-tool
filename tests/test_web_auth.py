@@ -118,3 +118,24 @@ def test_login_does_not_open_write_integration(anon_client):
     login(anon_client)
     res = anon_client.post("/api/integrations/lessons", json={})
     assert res.status_code == 401
+
+
+def test_unhandled_error_returns_json(client):
+    # 伺服器內部錯誤也要回 JSON，前端與自動訂場排程才能判斷（原本是純文字）
+    from fastapi.testclient import TestClient
+
+    from app.database import get_db
+    from app.main import app
+
+    class BrokenSession:
+        def query(self, *args, **kwargs):
+            raise RuntimeError("模擬資料庫錯誤")
+
+    app.dependency_overrides[get_db] = lambda: BrokenSession()
+    try:
+        c = TestClient(app, raise_server_exceptions=False, cookies=client.cookies)
+        res = c.get("/api/students")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert res.status_code == 500
+    assert "RuntimeError" in res.json()["detail"]
