@@ -96,3 +96,25 @@ def test_no_password_configured(anon_client, monkeypatch, tmp_path):
 @pytest.mark.parametrize("stored", ["", "scrypt$bad", "not-a-hash"])
 def test_verify_password_rejects_malformed_hash(stored):
     assert not web_auth.verify_password(TEST_PASSWORD, stored)
+
+
+# ---- 動智館查課表：Bearer Token 或網頁已登入 ----
+
+SCHEDULE_PARAMS = {"venue": "不存在的場館", "from": "2030-01-01", "to": "2030-01-02"}
+
+
+def test_venue_schedule_accepts_logged_in_browser_without_token(anon_client):
+    # Claude Desktop 在內建瀏覽器登入後，直接開網址讀內容，不送 token
+    assert anon_client.get("/api/integrations/venue-schedule", params=SCHEDULE_PARAMS).status_code == 401
+    wrong = {"Authorization": "Bearer wrong-token"}
+    assert anon_client.get("/api/integrations/venue-schedule", params=SCHEDULE_PARAMS, headers=wrong).status_code == 401
+    login(anon_client)
+    res = anon_client.get("/api/integrations/venue-schedule", params=SCHEDULE_PARAMS)
+    assert res.status_code == 400  # 通過驗證，只是場館不存在
+
+
+def test_login_does_not_open_write_integration(anon_client):
+    # 建立課程的端點仍然只認公開預約網站的 token，登入狀態不算
+    login(anon_client)
+    res = anon_client.post("/api/integrations/lessons", json={})
+    assert res.status_code == 401

@@ -6,10 +6,13 @@
 因為其中一個外部系統的 token 外流就要連帶換掉另一個。Token 檔案不存在
 就自動產生一組，不用另外設環境變數。
 """
+import hmac
 import secrets
 from pathlib import Path
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
+
+from app import web_auth
 
 _TOKEN_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,10 +34,20 @@ BOOKING_API_TOKEN = _load_or_create_token("booking_api_token.txt")
 PUBLIC_BOOKING_API_TOKEN = _load_or_create_token("public_booking_api_token.txt")
 
 
-def verify_booking_token(authorization: str | None = Header(None)) -> None:
-    """檢查 `Authorization: Bearer <token>`，給動智館自動訂場系統呼叫用。"""
-    if authorization != f"Bearer {BOOKING_API_TOKEN}":
-        raise HTTPException(status_code=401, detail="缺少或錯誤的 API token")
+def verify_booking_token_or_login(request: Request, authorization: str | None = Header(None)) -> None:
+    """動智館查課表（唯讀）：Bearer Token 或網頁已登入，任一個有效就放行。
+
+    Claude Desktop 在自動模式下，用程式把 Bearer Token 送到外部網域會被
+    Anthropic 的資料外洩防護擋下（改用雲端網址後才遇到，連本機時不會）。所以
+    多開一條路：教練自己在 Desktop 內建瀏覽器登入一次網站，之後 Desktop 只要
+    打開這個網址讀內容，不用傳任何 token。登入本來就看得到全部資料，這個端點
+    又是唯讀的，放行已登入的請求不會讓權限變大。寫入用的端點不適用這條規則。
+    """
+    if authorization is not None and hmac.compare_digest(authorization, f"Bearer {BOOKING_API_TOKEN}"):
+        return
+    if web_auth.is_valid_session(request.cookies.get(web_auth.COOKIE_NAME)):
+        return
+    raise HTTPException(status_code=401, detail="缺少或錯誤的 API token，或尚未登入網站")
 
 
 def verify_public_booking_token(authorization: str | None = Header(None)) -> None:

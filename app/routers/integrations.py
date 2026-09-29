@@ -1,6 +1,7 @@
 """給外部自動化系統用的資料介接端點（動智館自動訂場系統、公開預約網站）。
 
-這裡的端點都需要帶 `Authorization: Bearer <token>`（見 app/auth.py），
+這裡的端點都需要帶 `Authorization: Bearer <token>`（見 app/auth.py；唯讀的
+venue-schedule 另外接受網頁已登入的狀態，原因見 verify_booking_token_or_login），
 跟網站本身給瀏覽器用的其他 API 是分開的兩件事：這裡是特地開給「無人
 值守、排程觸發」或「另一個系統呼叫」用的資料介面。兩個外部系統各自
 驗證各自的 token，不共用，所以這個 router 不能整個掛統一的
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import verify_booking_token, verify_public_booking_token
+from app.auth import verify_booking_token_or_login, verify_public_booking_token
 from app.database import get_db
 from app.models import LessonStatus, PaymentStatus, Tier
 from app.pricing import resolve_price
@@ -26,7 +27,7 @@ TAIWAN_TZ = timezone(timedelta(hours=8))
 @router.get(
     "/venue-schedule",
     response_model=schemas.VenueScheduleOut,
-    dependencies=[Depends(verify_booking_token)],
+    dependencies=[Depends(verify_booking_token_or_login)],
 )
 def venue_schedule(
     venue: str = Query(..., description="場館名稱，需完全符合場地管理裡的名稱"),

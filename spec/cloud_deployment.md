@@ -13,6 +13,42 @@ Docker 讓服務更穩」，解決的是「伺服器有沒有開著」的問題�
 
 ---
 
+## 目前實際部署狀態（2026-09-29 上線）
+
+| 項目 | 實際情況 |
+|---|---|
+| 網址 | https://admin.badmintonlemon.com（主網域 badmintonlemon.com 保留給之後對學生的網站） |
+| 網域 | Cloudflare Registrar；DNS `A admin → VPS IP`，Proxy 關閉（灰色雲朵） |
+| 主機 | Vultr，Shared CPU 1 GB，Tokyo，已開 Auto Backups |
+| 系統 | Ubuntu 26.04 LTS（Vultr 給的版本，比原本規劃的 24.04 新，不影響） |
+| 登入主機 | `ssh root@<VPS的IP>`，只能用金鑰（密碼登入已關閉），金鑰有 passphrase |
+| 程式位置 | `/root/coaching-record-tool`，從私人 GitHub repo 用唯讀部署金鑰 clone |
+| 資料庫備份 | cron 每天台灣時間 03:00（UTC 19:00）跑 `scripts/backup_db.sh` |
+| 家裡電腦 | 排程 `CoachingRecordToolServer` 已停用；本機 `coaching.db` 是上線那一刻的備份，不再是正式資料 |
+
+跟下面原始步驟的差異：沒有另外建 `coach` 帳號，直接用 root，但關掉密碼登入、
+只允許金鑰（單人工具，省掉權限麻煩，安全性差別不大），所以下面寫
+`/home/coach/...` 的路徑實際是 `/root/...`。
+
+## 之後要更新網站（改功能、修 bug）
+
+1. 在本機的 Claude Code（這個專案資料夾）說要改什麼。改好後會先在本機用
+   「資料庫複本＋臨時埠」測試，不會動到正式資料，測過才 commit、push 到 GitHub。
+2. SSH 連進主機，執行這一行把新版拉下來、重新建置並重啟：
+   ```bash
+   cd ~/coaching-record-tool && git pull && docker compose -f docker-compose.cloud.yml up -d --build
+   ```
+   大約 1 分鐘。資料庫、密碼、token 這些檔案不在 git 裡，更新不會動到。
+3. 重新整理網頁確認。若更新後有問題，回報錯誤；要退回上一版可以
+   `git log --oneline -5` 找到上一個 commit，`git checkout <commit>` 後再跑一次第 2 步的 compose 指令。
+
+看服務狀態與紀錄：
+```bash
+cd ~/coaching-record-tool && docker compose -f docker-compose.cloud.yml ps && docker compose -f docker-compose.cloud.yml logs --tail 50
+```
+
+---
+
 ## 步驟一：買網域（Cloudflare Registrar）— 你自己操作
 
 1. 到 Cloudflare 註冊帳號、進「Domain Registration」買一個 `.com`
@@ -135,6 +171,14 @@ docker compose -f docker-compose.cloud.yml up -d --build
 的是本機那份舊資料），或本機一旦關掉之後直接連不上、訂場排程整個
 停擺卻不會有明顯錯誤訊息。
 
+**實際遇到的狀況（2026-09-29）**：動智館訂場是 Claude Desktop 的排程在跑。
+它在自動模式下「用程式把 Bearer Token 送到外部網域」會被 Anthropic 的資料
+外洩防護擋下（連本機 127.0.0.1 時不會）。解法：`venue-schedule` 這個唯讀
+端點改成「Bearer Token 或網頁已登入」都放行（見 `app/auth.py` 的
+`verify_booking_token_or_login`）。教練在 Desktop 內建瀏覽器登入網站一次，
+Desktop 直接開 `https://admin.badmintonlemon.com/api/integrations/venue-schedule?...`
+讀內容，不用送 token。登入 30 天到期，過期時 Desktop 要發 Discord 提醒重新登入。
+
 ## 步驟九：確認沒問題後，把舊的 Windows 排程退役
 
 在雲端版本穩定跑過幾天、手機也實際連過確認沒問題、動智館那邊也確認
@@ -180,6 +224,11 @@ crontab -e
 # 貼上這一行（記得把路徑換成你實際 clone 的位置；從 git 上抓下來的
 # .sh 檔預設沒有執行權限，用 sh 開頭執行就不用另外 chmod +x）
 0 3 * * * sh /home/coach/coaching-record-tool/scripts/backup_db.sh
+```
+
+實際設定（主機時鐘是 UTC，所以台灣凌晨 3 點要寫 19）：
+```bash
+(crontab -l 2>/dev/null; echo "0 19 * * * sh /root/coaching-record-tool/scripts/backup_db.sh") | crontab -
 ```
 
 **這只是「同一台主機上」的備份，防不了這台 VPS 本身整台掛掉或被誤刪
