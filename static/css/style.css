@@ -347,3 +347,63 @@ details table {
     max-width: 100%;
   }
 }
+
+/* 找空檔頁 */
+.panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+}
+
+.panel-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.hint {
+  color: #777;
+  font-size: 13px;
+}
+
+.check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.check-list label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: normal;
+}
+
+.warn-list div {
+  background: #fff4e0;
+  border-left: 3px solid #f0a030;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.panel select {
+  max-width: 240px;
+}
+
+.travel-input {
+  width: 90px;
+}

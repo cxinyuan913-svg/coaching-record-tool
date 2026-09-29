@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>找空檔 - 羽球教練紀錄工具</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/">行事曆</a>
+    <a href="/students.html">學生管理</a>
+    <a href="/packages.html">課程套組</a>
+    <a href="/venues.html">場地管理</a>
+    <a href="/price_rules.html">價目表</a>
+    <a href="/dashboard.html">收入統計</a>
+    <a href="/unpaid.html">未收款清單</a>
+    <a href="/booking.html">訂場檢查</a>
+    <a href="/slots.html">找空檔</a>
+  </nav>
+  <main>
+    <div class="toolbar">
+      <h1>找空檔</h1>
+    </div>
+
+    <div class="section-block">
+      <h2>1. 貼上學生訊息</h2>
+      <textarea id="msg-input" class="panel-textarea" rows="3" placeholder="例如：教練下週二或週四晚上可以嗎？竹北"></textarea>
+      <div class="panel-actions">
+        <button id="btn-parse">解析並找空檔</button>
+        <span id="parse-status" class="hint"></span>
+      </div>
+      <div id="parse-summary" class="panel" hidden></div>
+    </div>
+
+    <div class="section-block" id="conditions-block" hidden>
+      <h2>2. 條件（可手動調整後重新找）</h2>
+      <div class="panel">
+        <div class="form-row">
+          <label for="f-duration">課程時長</label>
+          <select id="f-duration"></select>
+          <span id="duration-source" class="hint"></span>
+        </div>
+        <div class="form-row">
+          <label>場館</label>
+          <div id="venue-checks" class="check-list"></div>
+        </div>
+        <button id="btn-suggest">重新找空檔</button>
+      </div>
+    </div>
+
+    <div class="section-block" id="result-block" hidden>
+      <h2>3. 結果</h2>
+      <div id="notes" class="warn-list"></div>
+      <table>
+        <thead>
+          <tr><th>日期</th><th>時段</th><th>場館</th><th>類型</th></tr>
+        </thead>
+        <tbody id="candidate-list"></tbody>
+      </table>
+      <h2 style="margin-top: 20px">給學生的訊息</h2>
+      <textarea id="msg-output" class="panel-textarea" rows="8"></textarea>
+      <div class="panel-actions">
+        <button id="btn-copy">複製</button>
+        <span id="copy-status" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <details id="travel-details">
+        <summary><strong>場館車程表</strong> <span class="hint">（沒填的組合不會排跨館候選）</span></summary>
+        <table>
+          <thead>
+            <tr><th>場館 A</th><th>場館 B</th><th>車程（分鐘）</th></tr>
+          </thead>
+          <tbody id="travel-list"></tbody>
+        </table>
+        <div class="panel-actions">
+          <button id="btn-save-travel">儲存車程表</button>
+          <span id="travel-status" class="hint"></span>
+        </div>
+      </details>
+    </div>
+  </main>
+
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/slots.js"></script>
+</body>
+</html>
