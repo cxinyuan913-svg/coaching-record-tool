@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_taipei
 from app.booking_parser.slot_search import (
     RecurringSearchRequest,
     RecurringSearchResult,
@@ -24,7 +25,7 @@ TAIWAN_TZ = timezone(timedelta(hours=8))
 def get_now() -> datetime:
     """台灣當地時間、不帶時區（跟課程資料表的存法一致）。獨立成 dependency
     是為了讓測試可以固定「現在」，不會因為真實日期往後走而壞掉。"""
-    return datetime.now(TAIWAN_TZ).replace(tzinfo=None)
+    return now_taipei()
 
 
 @router.get("/areas", response_model=dict[str, list[int]])

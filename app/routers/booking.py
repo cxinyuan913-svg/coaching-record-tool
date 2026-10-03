@@ -1,10 +1,10 @@
 """訂場檢查 API（見 SPEC.md 訂場開放時間）。"""
-from datetime import date as date_type
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import BookingStatus, LessonStatus
@@ -24,12 +24,12 @@ def _booking_open_at(lesson: models.Lesson, venue: models.Venue) -> datetime | N
 def booking_check(db: Session = Depends(get_db)):
     from app.routers.lessons import _to_out as lesson_to_out
 
-    now = datetime.now()
+    now = now_taipei()
     lessons = (
         db.query(models.Lesson)
         .filter(
             models.Lesson.status == LessonStatus.SCHEDULED,
-            models.Lesson.date >= date_type.today(),  # 日期已過的課程不用再提醒訂場
+            models.Lesson.date >= now.date(),  # 日期已過的課程不用再提醒訂場
         )
         .order_by(models.Lesson.date, models.Lesson.start_time)
         .all()
@@ -64,7 +64,7 @@ def update_booking_status(
     if lesson is None:
         raise HTTPException(status_code=404, detail="課程不存在")
     lesson.booking_status = payload.booking_status
-    lesson.booked_at = datetime.now() if payload.booking_status == BookingStatus.BOOKED else None
+    lesson.booked_at = now_taipei() if payload.booking_status == BookingStatus.BOOKED else None
     db.commit()
     db.refresh(lesson)
     return lesson_to_out(lesson)

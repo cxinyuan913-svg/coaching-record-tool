@@ -1,9 +1,8 @@
 """套組課程 CRUD API：批次排課、剩餘堂數、付款狀態。"""
-from datetime import date as date_type
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_taipei, today_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PackageStatus, PaymentStatus
@@ -99,7 +98,7 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
         default_venue_id=package.default_venue_id,
         status=PackageStatus.ACTIVE,
         payment_status=package.payment_status,
-        payment_date=date_type.today() if package.payment_status == PaymentStatus.PAID else None,
+        payment_date=today_taipei() if package.payment_status == PaymentStatus.PAID else None,
     )
     db.add(db_package)
     db.flush()  # 取得 db_package.id 供 lessons 使用
@@ -194,7 +193,7 @@ def update_package_payment(
         raise HTTPException(status_code=404, detail="套組不存在")
     package.payment_status = payload.payment_status
     package.payment_date = (
-        date_type.today() if payload.payment_status == PaymentStatus.PAID else None
+        today_taipei() if payload.payment_status == PaymentStatus.PAID else None
     )
     # 套組的付款狀態變更時，底下所有 lessons 的付款狀態跟著同步
     db.query(models.Lesson).filter(models.Lesson.package_id == package_id).update(
@@ -229,8 +228,6 @@ def get_package_settlement(package_id: int, db: Session = Depends(get_db)):
 @router.patch("/{package_id}/settlement/settle", response_model=schemas.PackageSettlement)
 def settle_package(package_id: int, db: Session = Depends(get_db)):
     """將該套組所有未結清差額整批標記為已結清。"""
-    from datetime import datetime
-
     package = db.get(models.Package, package_id)
     if package is None:
         raise HTTPException(status_code=404, detail="套組不存在")
@@ -239,7 +236,7 @@ def settle_package(package_id: int, db: Session = Depends(get_db)):
         .filter(models.Adjustment.package_id == package_id, models.Adjustment.settled.is_(False))
         .all()
     )
-    now = datetime.now()
+    now = now_taipei()
     for a in adjustments:
         a.settled = True
         a.settled_at = now

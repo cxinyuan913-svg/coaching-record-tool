@@ -358,3 +358,28 @@ def test_未超過門檻天數的未收款不會被通知(client, monkeypatch):
     with SessionLocal() as db:
         scheduler._check_unpaid_reminders(db)
     assert messages == []
+
+
+def test_上課提醒用台灣時間判斷不受伺服器時區影響(client, monkeypatch):
+    """2026-09-29 上雲端後，主機與 Docker 容器是 UTC，提醒用 datetime.now() 判斷，
+    結果晚了約 8 小時。這裡把「現在的台灣時間」固定在跟測試機器時鐘無關的時刻，
+    確保排程一定是用 now_taipei() 判斷，而不是伺服器本機時間。"""
+    student = create_student(client)
+    venue = create_venue(client)
+    messages = _sent_messages(monkeypatch)
+    taipei_now = datetime(2030, 1, 7, 18, 0)
+    monkeypatch.setattr(scheduler, "now_taipei", lambda: taipei_now)
+
+    with SessionLocal() as db:
+        for start in (time(18, 30), time(23, 0)):  # 30 分鐘後要提醒；5 小時後還不用
+            db.add(Lesson(
+                student_id=student["id"], venue_id=venue["id"], date=taipei_now.date(),
+                start_time=start, duration=60, status=LessonStatus.SCHEDULED,
+                payment_status=PaymentStatus.UNPAID, revenue_amount=1000,
+            ))
+        db.commit()
+
+    with SessionLocal() as db:
+        scheduler._check_lesson_reminders(db)
+    assert len(messages) == 1
+    assert "18:30" in messages[0]

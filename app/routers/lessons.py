@@ -5,6 +5,7 @@ from datetime import date as date_type
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.timeutil import today_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PaymentStatus
@@ -97,7 +98,7 @@ def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
             revenue_amount = resolve_price(db, student.tier, lesson.headcount, lesson.duration)
         venue_fee_amount = lesson.venue_fee_amount
         payment_status = lesson.payment_status
-        payment_date = date_type.today() if lesson.payment_status == PaymentStatus.PAID else None
+        payment_date = today_taipei() if lesson.payment_status == PaymentStatus.PAID else None
         sequence_no = None
 
     db_lesson = models.Lesson(
@@ -206,7 +207,7 @@ def update_lesson(lesson_id: int, lesson: schemas.LessonUpdate, db: Session = De
     else:
         if db_lesson.payment_status != lesson.payment_status:
             db_lesson.payment_date = (
-                date_type.today() if lesson.payment_status == PaymentStatus.PAID else None
+                today_taipei() if lesson.payment_status == PaymentStatus.PAID else None
             )
         db_lesson.payment_status = lesson.payment_status
         db_lesson.revenue_amount = lesson.revenue_amount
@@ -251,7 +252,7 @@ def update_payment_status(
         )
     db_lesson.payment_status = payload.payment_status
     db_lesson.payment_date = (
-        date_type.today() if payload.payment_status == PaymentStatus.PAID else None
+        today_taipei() if payload.payment_status == PaymentStatus.PAID else None
     )
     db.commit()
     db.refresh(db_lesson)

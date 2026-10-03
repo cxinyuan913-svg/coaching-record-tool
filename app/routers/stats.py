@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.timeutil import today_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PackageStatus, PaymentStatus
@@ -30,7 +31,7 @@ def _sum_lessons(
     if completed is not None:
         is_completed = or_(
             models.Lesson.status == LessonStatus.COMPLETED,
-            models.Lesson.date < date_type.today(),
+            models.Lesson.date < today_taipei(),
         )
         query = query.filter(is_completed if completed else ~is_completed)
     return query.scalar()
@@ -53,7 +54,7 @@ def _revenue(db: Session, start: date_type | None, end: date_type | None) -> flo
 
 @router.get("/revenue", response_model=schemas.RevenueStats)
 def revenue_stats(db: Session = Depends(get_db)):
-    today = date_type.today()
+    today = today_taipei()
     week_start = today - timedelta(days=today.weekday())  # 週一為週起始
     week_end = week_start + timedelta(days=6)
     month_start = today.replace(day=1)

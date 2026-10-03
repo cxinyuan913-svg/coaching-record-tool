@@ -1,10 +1,10 @@
 """套組批次排課、剩餘堂數重算、請假順延邏輯（見 SPEC.md 套組批次排課／請假順延）。"""
-from datetime import date as date_type
 from datetime import timedelta
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.timeutil import today_taipei
 from app import models
 from app.models import AdjustmentType, LessonStatus, PackageStatus
 from app.pricing import resolve_price
@@ -42,7 +42,7 @@ def _is_used_up(lesson: models.Lesson) -> bool:
         return False
     if lesson.status in (LessonStatus.COMPLETED, LessonStatus.CANCELLED):
         return True
-    return lesson.date < date_type.today()
+    return lesson.date < today_taipei()
 
 
 def remaining_sessions(package: models.Package) -> int:

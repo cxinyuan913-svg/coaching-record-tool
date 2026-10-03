@@ -30,6 +30,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_taipei, today_taipei
 from app import models
 from app.database import SessionLocal
 from app.models import LessonStatus, PaymentStatus
@@ -69,8 +70,8 @@ def _save_last_unpaid_reminder_date(value: date) -> None:
 
 def _check_lesson_reminders(db: Session) -> None:
     """課程開始前 60 分鐘內、還沒發過提醒的排定課程，發一次「一小時後上課」。"""
-    now = datetime.now()
-    today = date.today()
+    now = now_taipei()
+    today = now.date()
     lessons = (
         db.query(models.Lesson)
         .filter(
@@ -95,7 +96,7 @@ def _check_lesson_reminders(db: Session) -> None:
 
 def _check_package_ending_reminders(db: Session) -> None:
     """套組最後一堂課（排除已取消）落在「今天～今天+7天」內，且還沒發過提醒，發一次。"""
-    today = date.today()
+    today = today_taipei()
     packages = (
         db.query(models.Package)
         .filter(models.Package.ending_reminder_sent.is_(False))
@@ -132,7 +133,7 @@ def _is_adjustment_overdue(db: Session, adjustment: models.Adjustment, cutoff: d
 
 def _check_unpaid_reminders(db: Session) -> None:
     """逾期超過門檻天數的未收款課程/套組、未結清差額，彙整成一則訊息，一天最多發一次。"""
-    today = date.today()
+    today = today_taipei()
     if _load_last_unpaid_reminder_date() == today:
         return
     cutoff = today - timedelta(days=UNPAID_REMINDER_THRESHOLD_DAYS)

@@ -1,9 +1,8 @@
 """差額與額外費用 API（見 SPEC.md 額外費用與期末結算）。"""
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_taipei
 from app import models, schemas
 from app.database import get_db
 
@@ -69,7 +68,7 @@ def settle_adjustment(adjustment_id: int, db: Session = Depends(get_db)):
     if adjustment is None:
         raise HTTPException(status_code=404, detail="差額紀錄不存在")
     adjustment.settled = True
-    adjustment.settled_at = datetime.now()
+    adjustment.settled_at = now_taipei()
     db.commit()
     db.refresh(adjustment)
     return adjustment
