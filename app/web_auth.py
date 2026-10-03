@@ -42,7 +42,8 @@ FAILURE_WINDOW_SECONDS = 15 * 60
 _SCRYPT_N, _SCRYPT_R, _SCRYPT_P = 2**14, 8, 1
 
 # 不用登入就能存取的路徑
-_PUBLIC_PATHS = {"/login.html", "/api/auth/login", "/api/auth/logout", "/api/health"}
+# favicon.svg：分頁小圖示，登入頁也要顯示；圖示本身沒有任何資料
+_PUBLIC_PATHS = {"/login.html", "/api/auth/login", "/api/auth/logout", "/api/health", "/static/favicon.svg"}
 _PUBLIC_PREFIXES = (
     "/api/integrations/",  # 外部系統，用 Bearer Token 驗證（見 app/auth.py）
     "/static/css/",  # 登入頁需要樣式；樣式檔沒有任何資料

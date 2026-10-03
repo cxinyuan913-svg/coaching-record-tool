@@ -22,6 +22,11 @@ def test_public_paths_do_not_need_login(anon_client):
     assert anon_client.get("/login.html").status_code == 200
     assert anon_client.get("/api/health").status_code == 200
     assert anon_client.get("/static/css/style.css").status_code == 200
+    # 分頁小圖示：登入頁也要顯示，所以不用登入就能讀
+    icon = anon_client.get("/static/favicon.svg")
+    assert icon.status_code == 200 and icon.headers["content-type"].startswith("image/svg+xml")
+    # 其他 static 檔案（例如 JS）仍然要登入
+    assert anon_client.get("/static/js/slots.js").status_code == 401
 
 
 def test_integrations_still_use_bearer_token_without_login(anon_client):

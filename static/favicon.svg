@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- 網頁分頁小圖示：深藍底行事曆（跟導覽列同色）＋檸檬黃日曆橫條（呼應 badmintonlemon） -->
+  <defs>
+    <clipPath id="body">
+      <rect x="2" y="5" width="28" height="25" rx="5" />
+    </clipPath>
+  </defs>
+  <g clip-path="url(#body)">
+    <rect x="2" y="5" width="28" height="25" fill="#2d3142" />
+    <rect x="2" y="5" width="28" height="8" fill="#f7d332" />
+  </g>
+  <rect x="8.5" y="2" width="3.5" height="7" rx="1.75" fill="#2d3142" />
+  <rect x="20" y="2" width="3.5" height="7" rx="1.75" fill="#2d3142" />
+  <g fill="#ffffff">
+    <rect x="7" y="16" width="4.5" height="4.5" rx="1" />
+    <rect x="13.75" y="16" width="4.5" height="4.5" rx="1" />
+    <rect x="20.5" y="16" width="4.5" height="4.5" rx="1" />
+    <rect x="7" y="22.5" width="4.5" height="4.5" rx="1" />
+    <rect x="13.75" y="22.5" width="4.5" height="4.5" rx="1" fill="#f7d332" />
+    <rect x="20.5" y="22.5" width="4.5" height="4.5" rx="1" />
+  </g>
+</svg>
