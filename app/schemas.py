@@ -155,7 +155,18 @@ class PackageBase(BaseModel):
     payment_status: PaymentStatus = PaymentStatus.UNPAID
 
 
+class PackageSession(BaseModel):
+    date: date
+    start_time: time
+
+
 class PackageCreate(PackageBase):
+    sessions: list[PackageSession] = []
+    """每堂各自的日期＋開始時間（找空檔頁「逐週排排看」一鍵建立用：某幾週可能改成接課
+    的時間）。有給就優先用這個，忽略 session_dates；時長、場館仍統一套用套組設定。"""
+    check_conflicts: bool = False
+    """一鍵建立時設 True：建立前逐堂檢查有沒有跟既有課程（不限場館）時間重疊，有就整筆
+    不建立、回 409。課程套組頁照舊不檢查，行為不變。"""
     session_dates: list[date] = []
     """使用者手動選定的上課日期清單（不假設每週固定間隔，方便跳過連假）；堂數＝清單長度。
     留空表示「臨時約時間」：先收款、之後在行事曆逐堂新增再掛回這個套組，此時改用 total_sessions 欄位。"""

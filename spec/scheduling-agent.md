@@ -138,7 +138,10 @@ venue_travel_times (id,
 
 - 每週的選擇在前端即時改，學生訊息跟著更新；跳過幾週就往後順延幾週，最多順延 2 週，排不滿時顯示還差幾堂。
 - **API**：`POST /api/slot-search/recurring/plan`，請求 `weekday`、`date_from`、`weeks`、`preferred_start`、`venue_id`、`time_from`／`time_to`（替代時段範圍）、`duration_minutes`；回應 `week_plans[]`（共 weeks+2 週：`preferred_ok`、`preferred_adjacent`、`preferred_reason`、`suggestion`、`alternatives[]`、`day_busy[]`）。
-- **還沒做**：選定方案後一鍵建立課程套組（先由教練到「課程套組」頁手動建立）。
+- **一鍵建立課程套組**（2026-10-03 加入）：推薦方案卡片與逐週排排看都有「建立課程套組」按鈕，跳出小視窗。日期、每堂時間、場館、時長直接帶入（不能在視窗裡改）；教練補學生（可在視窗裡直接新增學生：姓名＋身份別）、套組名稱（預設「週六固定 8 堂」）、教練費與場地費／小時、購買日期（今天）、收款狀態（未收款）。
+  - `POST /api/packages` 新增選填欄位 `sessions: [{date, start_time}]`（每堂各自時間，逐週排排看某幾週改成接課時間時用；有給就忽略 `session_dates`）與 `check_conflicts`（一鍵建立時為 true：建立前逐堂檢查跟既有排定／已完成課程（不限場館）有沒有時間重疊，有就整筆不建立、回 409 並列出哪幾堂）。課程套組頁原本的建立方式不帶這兩個欄位，行為不變。
+  - 套組的 `recur_start_time` 用出現最多次的開始時間。
+  - 正式給學生的訊息（含付費日期與匯款資訊）仍從課程套組頁的「課程訊息」產生。
 
 ## 不在本階段範圍
 

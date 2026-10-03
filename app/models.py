@@ -17,8 +17,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.timeutil import now_taipei
 from app.database import Base
+from app.timeutil import now_taipei
 
 
 class Tier(str, enum.Enum):

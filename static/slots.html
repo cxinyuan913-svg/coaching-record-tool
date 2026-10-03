@@ -167,6 +167,7 @@
         <textarea id="r-plan-message" class="panel-textarea" rows="11"></textarea>
         <div class="panel-actions">
           <button type="button" id="btn-plan-copy">複製</button>
+          <button type="button" class="secondary" id="btn-plan-package">建立課程套組</button>
           <span class="hint" id="r-plan-copy-status"></span>
         </div>
       </div>
@@ -188,6 +189,58 @@
       </details>
     </div>
   </main>
+
+  <div class="modal-backdrop" id="package-modal">
+    <div class="modal">
+      <h2>建立課程套組</h2>
+      <div class="hint" id="pk-summary"></div>
+      <form id="package-form">
+        <div class="form-row">
+          <label for="pk-student">學生</label>
+          <div class="inline-row">
+            <select id="pk-student"></select>
+            <button type="button" class="secondary" id="pk-new-student-toggle">＋新增學生</button>
+          </div>
+          <div class="inline-row" id="pk-new-student" hidden>
+            <input id="pk-new-name" type="text" placeholder="姓名" />
+            <select id="pk-new-tier">
+              <option value="new">新生</option>
+              <option value="friend">朋友</option>
+              <option value="regular">熟客</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="pk-name">套組名稱</label>
+          <input id="pk-name" type="text" required />
+        </div>
+        <div class="form-row">
+          <label for="pk-coach-fee">教練費／小時</label>
+          <input id="pk-coach-fee" type="number" min="0" step="1" required />
+        </div>
+        <div class="form-row">
+          <label for="pk-venue-fee">場地費／小時</label>
+          <input id="pk-venue-fee" type="number" min="0" step="1" value="0" required />
+        </div>
+        <div class="form-row">
+          <label for="pk-purchased">購買日期</label>
+          <input id="pk-purchased" type="date" required />
+        </div>
+        <div class="form-row">
+          <label for="pk-payment">收款狀態</label>
+          <select id="pk-payment">
+            <option value="unpaid">未收款</option>
+            <option value="paid">已收款</option>
+          </select>
+        </div>
+        <p class="hint" id="pk-status"></p>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="pk-cancel">取消</button>
+          <button type="submit" id="pk-submit">建立</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="/static/js/common.js"></script>
   <script src="/static/js/slots.js"></script>

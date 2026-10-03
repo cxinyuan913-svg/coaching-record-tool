@@ -5,7 +5,6 @@ from datetime import date as date_type
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.timeutil import today_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PaymentStatus
@@ -17,6 +16,7 @@ from app.package_logic import (
     sync_headcount_diff_adjustment,
 )
 from app.pricing import resolve_price
+from app.timeutil import today_taipei
 
 router = APIRouter(prefix="/api/lessons", tags=["lessons"])
 

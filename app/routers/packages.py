@@ -1,8 +1,9 @@
 """套組課程 CRUD API：批次排課、剩餘堂數、付款狀態。"""
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.timeutil import now_taipei, today_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PackageStatus, PaymentStatus
@@ -15,6 +16,7 @@ from app.package_logic import (
     recompute_remaining_sessions,
     remaining_sessions,
 )
+from app.timeutil import now_taipei, today_taipei
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
@@ -61,6 +63,32 @@ def list_packages(
     return [_to_out(p) for p in packages]
 
 
+def find_conflicts(db: Session, dates: list, start_times: dict | None, default_start, duration: int) -> list[str]:
+    """一鍵建立套組前的最後檢查：每堂跟既有課程（排定／已完成，不限場館）有沒有時間重疊。
+    從找空檔排好到按下建立之間行事曆可能被改過，不檢查會變成同一時間兩堂課。"""
+    existing = (
+        db.query(models.Lesson)
+        .filter(
+            models.Lesson.date.in_(dates),
+            models.Lesson.status.in_((LessonStatus.SCHEDULED, LessonStatus.COMPLETED)),
+        )
+        .all()
+    )
+    conflicts = []
+    for d in dates:
+        start = datetime.combine(d, (start_times or {}).get(d, default_start))
+        end = start + timedelta(minutes=duration)
+        for lesson in existing:
+            if lesson.date != d:
+                continue
+            l_start = datetime.combine(lesson.date, lesson.start_time)
+            l_end = l_start + timedelta(minutes=lesson.duration)
+            if l_start < end and start < l_end:
+                conflicts.append(f"{d.month}/{d.day} {start:%H:%M}（已有 {l_start:%H:%M}-{l_end:%H:%M} 的課）")
+                break
+    return conflicts
+
+
 @router.post("", response_model=schemas.PackageOut, status_code=201)
 def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)):
     student = db.get(models.Student, package.student_id)
@@ -69,7 +97,18 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     venue = db.get(models.Venue, package.default_venue_id)
     if venue is None:
         raise HTTPException(status_code=404, detail="場地不存在")
-    dates = sorted(set(package.session_dates))
+    start_times = None
+    if package.sessions:
+        start_times = {s.date: s.start_time for s in package.sessions}
+        if len(start_times) != len(package.sessions):
+            raise HTTPException(status_code=400, detail="同一天不能排兩堂")
+        dates = sorted(start_times)
+    else:
+        dates = sorted(set(package.session_dates))
+    if dates and package.check_conflicts:
+        conflicts = find_conflicts(db, dates, start_times, package.recur_start_time, package.session_duration)
+        if conflicts:
+            raise HTTPException(status_code=409, detail="以下時段已經有課，沒有建立套組：" + "、".join(conflicts))
     if dates:
         total_sessions = len(dates)
         start_date = dates[0]
@@ -103,7 +142,7 @@ def create_package(package: schemas.PackageCreate, db: Session = Depends(get_db)
     db.add(db_package)
     db.flush()  # 取得 db_package.id 供 lessons 使用
     if dates:
-        generate_package_lessons(db, db_package, dates)
+        generate_package_lessons(db, db_package, dates, start_times)
         db.flush()
     recompute_package_pricing(db, db_package)
     db.commit()

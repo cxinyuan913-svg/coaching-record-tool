@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.timeutil import now_taipei
 from app.booking_parser.slot_search import (
     RecurringPlanRequest,
     RecurringPlanResult,
@@ -19,6 +18,7 @@ from app.booking_parser.slot_search import (
     search_slots,
 )
 from app.database import get_db
+from app.timeutil import now_taipei
 
 router = APIRouter(prefix="/api/slot-search", tags=["slot-search"])
 

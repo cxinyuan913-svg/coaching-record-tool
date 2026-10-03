@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.timeutil import today_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import LessonStatus, PackageStatus, PaymentStatus
+from app.timeutil import today_taipei
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 

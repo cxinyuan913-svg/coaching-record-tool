@@ -30,12 +30,12 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.timeutil import now_taipei, today_taipei
 from app import models
 from app.database import SessionLocal
 from app.models import LessonStatus, PaymentStatus
 from app.notifications import send_discord_notification
 from app.package_logic import remaining_sessions as package_remaining_sessions
+from app.timeutil import now_taipei, today_taipei
 
 CHECK_INTERVAL_SECONDS = 60
 UNPAID_REMINDER_THRESHOLD_DAYS = int(os.environ.get("UNPAID_REMINDER_DAYS", "3"))

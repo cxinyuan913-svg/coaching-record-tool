@@ -4,10 +4,10 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.timeutil import now_taipei
 from app import models, schemas
 from app.database import get_db
 from app.models import BookingStatus, LessonStatus
+from app.timeutil import now_taipei
 
 router = APIRouter(prefix="/api/booking", tags=["booking"])
 

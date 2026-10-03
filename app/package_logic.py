@@ -4,16 +4,19 @@ from datetime import timedelta
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.timeutil import today_taipei
 from app import models
 from app.models import AdjustmentType, LessonStatus, PackageStatus
 from app.pricing import resolve_price
+from app.timeutil import today_taipei
 
 
-def generate_package_lessons(db: Session, package: models.Package, dates: list) -> None:
-    """依使用者手動選定的日期清單，一次產生對應堂數的 lessons（時段/時長統一套用套組設定）。
+def generate_package_lessons(
+    db: Session, package: models.Package, dates: list, start_times: dict | None = None
+) -> None:
+    """依使用者手動選定的日期清單，一次產生對應堂數的 lessons（時長、場館統一套用套組設定）。
 
     dates 需已排序；堂數 = len(dates)，不再假設每週固定間隔（因應連假手動跳過的情境）。
+    start_times（日期 → 開始時間）有給的日期用自己的時間，沒給的用套組的 recur_start_time。
     """
     hours = package.session_duration / 60
     for i, lesson_date in enumerate(dates):
@@ -22,7 +25,7 @@ def generate_package_lessons(db: Session, package: models.Package, dates: list) 
             venue_id=package.default_venue_id,
             package_id=package.id,
             date=lesson_date,
-            start_time=package.recur_start_time,
+            start_time=(start_times or {}).get(lesson_date, package.recur_start_time),
             duration=package.session_duration,
             headcount=1,
             sequence_no=i + 1,

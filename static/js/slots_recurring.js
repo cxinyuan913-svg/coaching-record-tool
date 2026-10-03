@@ -8,6 +8,8 @@ const WEEKDAY_NAMES = ["週一", "週二", "週三", "週四", "週五", "週六
 const WEEKDAY_SHORT = "日一二三四五六"; // 對應 JS getDay()，週日=0
 
 let currentPlan = null; // 逐週排排看的 API 結果
+let lastSearch = null; // 最近一次查詢的條件（星期、時長），建立套組時用
+let pendingPackage = null; // 準備建立套組的內容：{venueId, venueName, lessons}
 let planChoices = []; // 每週的選擇：{kind: "pref" | "suggest" | "alt" | "skip", alt: 索引}
 
 // API 回傳的日期是 YYYY-MM-DD，直接切字串，不經過 Date 物件換算避免時區偏移
@@ -86,6 +88,7 @@ async function searchRecurring() {
     time_to: timeTo,
     duration_minutes: Number(document.getElementById("r-duration").value),
   };
+  lastSearch = { weekday: common.weekday, duration: common.duration_minutes };
   const button = document.getElementById("btn-recurring");
   button.disabled = true;
   status.textContent = "查詢中…";
@@ -141,16 +144,23 @@ function renderRecurring(result) {
             .join("")}
           <div class="panel-actions">
             <button type="button" class="secondary" data-copy="${i}">複製給學生的訊息</button>
+            <button type="button" class="secondary" data-package="${i}">建立課程套組</button>
             <span class="hint" data-copy-status="${i}"></span>
           </div>
         </div>`
       )
       .join("");
+    const optionLessons = (o) => o.dates.map((d) => ({ date: d, start: o.start_time, end: o.end_time }));
     box.querySelectorAll("[data-copy]").forEach((btn) =>
       btn.addEventListener("click", () => {
         const o = result.options[Number(btn.dataset.copy)];
-        const lessons = o.dates.map((d) => ({ date: d, start: o.start_time, end: o.end_time }));
-        copyText(buildLessonsMessage(o.venue_name, lessons), document.querySelector(`[data-copy-status="${btn.dataset.copy}"]`));
+        copyText(buildLessonsMessage(o.venue_name, optionLessons(o)), document.querySelector(`[data-copy-status="${btn.dataset.copy}"]`));
+      })
+    );
+    box.querySelectorAll("[data-package]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const o = result.options[Number(btn.dataset.package)];
+        openPackageModal({ venueId: o.venue_id, venueName: o.venue_name, lessons: optionLessons(o) });
       })
     );
   }
@@ -191,6 +201,17 @@ function visibleWeekCount() {
     if (lessons === currentPlan.weeks) return i + 1;
   }
   return currentPlan.week_plans.length;
+}
+
+// 目前每週選擇對應的實際上課清單（跳過的週不算），訊息跟建立套組都用這份
+function planLessons() {
+  const count = visibleWeekCount();
+  const lessons = [];
+  for (let i = 0; i < count; i++) {
+    const slot = chosenSlot(currentPlan.week_plans[i], planChoices[i]);
+    if (slot) lessons.push({ date: currentPlan.week_plans[i].date, ...slot });
+  }
+  return lessons;
 }
 
 function radio(i, value, label, checked, disabled = false) {
@@ -246,16 +267,98 @@ function renderPlan() {
     })
   );
 
-  const lessons = [];
-  for (let i = 0; i < count; i++) {
-    const slot = chosenSlot(currentPlan.week_plans[i], planChoices[i]);
-    if (slot) lessons.push({ date: currentPlan.week_plans[i].date, ...slot });
-  }
+  const lessons = planLessons();
   document.getElementById("r-plan-warning").textContent =
     lessons.length < currentPlan.weeks
       ? `⚠ 目前只排得到 ${lessons.length} 堂（最多順延 2 週），還差 ${currentPlan.weeks - lessons.length} 堂，請改選替代時段或減少週數。`
       : "";
   document.getElementById("r-plan-message").value = buildLessonsMessage(currentPlan.venue_name, lessons);
+}
+
+// ---- 一鍵建立課程套組 ----
+
+async function openPackageModal(pkg) {
+  pendingPackage = pkg;
+  const weekdayName = WEEKDAY_NAMES[lastSearch.weekday];
+  document.getElementById("pk-summary").innerHTML =
+    `${escapeHtml(pkg.venueName)}｜每堂 ${lastSearch.duration} 分鐘｜共 ${pkg.lessons.length} 堂<br />` +
+    pkg.lessons.map((l) => `${mdWithWeekday(l.date)} ${hhmm(l.start)}～${hhmm(l.end)}`).join("、");
+  document.getElementById("pk-name").value = `${weekdayName}固定 ${pkg.lessons.length} 堂`;
+  document.getElementById("pk-purchased").value = toLocalDateString(new Date());
+  document.getElementById("pk-coach-fee").value = "";
+  document.getElementById("pk-venue-fee").value = "0";
+  document.getElementById("pk-payment").value = "unpaid";
+  document.getElementById("pk-new-student").hidden = true;
+  document.getElementById("pk-student").disabled = false;
+  document.getElementById("pk-new-name").value = "";
+  document.getElementById("pk-status").textContent = "";
+  const students = await api.get("/api/students");
+  document.getElementById("pk-student").innerHTML = students
+    .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
+    .join("");
+  document.getElementById("package-modal").classList.add("open");
+}
+
+function closePackageModal() {
+  document.getElementById("package-modal").classList.remove("open");
+}
+
+// 套組的預設上課時間用出現最多次的那個（其他週照各自的時間建立）
+function mostCommonStart(lessons) {
+  const counts = {};
+  lessons.forEach((l) => (counts[l.start] = (counts[l.start] || 0) + 1));
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+async function submitPackage(e) {
+  e.preventDefault();
+  const status = document.getElementById("pk-status");
+  const coachFee = parseFloat(document.getElementById("pk-coach-fee").value);
+  if (Number.isNaN(coachFee)) {
+    status.textContent = "請填教練費";
+    return;
+  }
+  const submit = document.getElementById("pk-submit");
+  submit.disabled = true;
+  status.textContent = "建立中…";
+  try {
+    let studentId = Number(document.getElementById("pk-student").value);
+    if (!document.getElementById("pk-new-student").hidden) {
+      const name = document.getElementById("pk-new-name").value.trim();
+      if (!name) {
+        status.textContent = "請填新學生的姓名";
+        return;
+      }
+      const student = await api.post("/api/students", {
+        name,
+        tier: document.getElementById("pk-new-tier").value,
+      });
+      studentId = student.id;
+    }
+    const pkg = pendingPackage;
+    const created = await api.post("/api/packages", {
+      student_id: studentId,
+      name: document.getElementById("pk-name").value.trim(),
+      session_duration: lastSearch.duration,
+      coach_fee_per_hour: coachFee,
+      venue_fee_per_hour: parseFloat(document.getElementById("pk-venue-fee").value) || 0,
+      purchased_date: document.getElementById("pk-purchased").value,
+      recur_start_time: mostCommonStart(pkg.lessons),
+      default_venue_id: pkg.venueId,
+      payment_status: document.getElementById("pk-payment").value,
+      sessions: pkg.lessons.map((l) => ({ date: l.date, start_time: l.start })),
+      check_conflicts: true,
+    });
+    closePackageModal();
+    document.getElementById("r-status").innerHTML =
+      `✅ 已建立套組「${escapeHtml(created.name)}」，共 ${created.total_sessions} 堂，已加到行事曆。` +
+      `<a href="/packages.html">到課程套組查看</a>`;
+  } catch (err) {
+    // 409 = 建立前檢查發現撞課，訊息會列出是哪幾堂
+    status.textContent = `沒有建立：${err.message}`;
+  } finally {
+    submit.disabled = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -288,4 +391,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-plan-copy").addEventListener("click", () =>
     copyText(document.getElementById("r-plan-message").value, document.getElementById("r-plan-copy-status"))
   );
+  document.getElementById("btn-plan-package").addEventListener("click", () => {
+    const lessons = planLessons();
+    if (lessons.length < currentPlan.weeks) {
+      document.getElementById("r-plan-copy-status").textContent =
+        `還差 ${currentPlan.weeks - lessons.length} 堂，先調整到排滿再建立`;
+      return;
+    }
+    openPackageModal({ venueId: currentPlan.venue_id, venueName: currentPlan.venue_name, lessons });
+  });
+  document.getElementById("pk-new-student-toggle").addEventListener("click", () => {
+    const box = document.getElementById("pk-new-student");
+    box.hidden = !box.hidden;
+    document.getElementById("pk-student").disabled = !box.hidden;
+  });
+  document.getElementById("pk-cancel").addEventListener("click", closePackageModal);
+  document.getElementById("package-form").addEventListener("submit", submitPackage);
 });
