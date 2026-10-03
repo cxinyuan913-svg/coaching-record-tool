@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app import models
+from app.booking_parser.recurring_finder import MAX_POSTPONE, find_recurring, weekly_dates
 from app.booking_parser.slot_finder import (
     WORK_END,
     WORK_START,
@@ -123,20 +124,16 @@ def area_presets(db: Session) -> dict[str, list[int]]:
     return presets
 
 
-def search_slots(db: Session, req: SlotSearchRequest, now: datetime) -> SlotSearchResult:
-    """now 是台灣當地時間、不帶時區（跟課程資料表的存法一致）。"""
+def _load_venues(db: Session, venue_ids: list[int]) -> dict[int, models.Venue]:
     venues = {v.id: v for v in db.query(models.Venue)}
-    unknown = set(req.venue_ids) - venues.keys()
+    unknown = set(venue_ids) - venues.keys()
     if unknown:
         raise SlotSearchNotAllowed(f"場地不存在：{sorted(unknown)}")
+    return venues
 
-    days = [req.date_from + timedelta(days=i) for i in range((req.date_to - req.date_from).days + 1)]
-    windows = [
-        TimeWindow(start=datetime.combine(d, req.time_from), end=datetime.combine(d, req.time_to))
-        for d in days
-    ]
 
-    # 所有場館的課都要撈：教練人只有一個，別館的課也會卡住時間
+def _load_busy(db: Session, days: list[date]) -> list[BusySlot]:
+    """這些日期所有場館的占用課程：教練人只有一個，別館的課也會卡住時間。"""
     lessons = (
         db.query(models.Lesson)
         .filter(models.Lesson.date.in_(days), models.Lesson.status.in_(OCCUPYING_STATUSES))
@@ -153,14 +150,30 @@ def search_slots(db: Session, req: SlotSearchRequest, now: datetime) -> SlotSear
                 end=start + timedelta(minutes=lesson.duration),
             )
         )
+    return busy
+
+
+def _load_travel(db: Session):
     pairs = {(t.venue_a_id, t.venue_b_id): t.travel_minutes for t in db.query(models.VenueTravelTime)}
+    return make_travel_lookup(pairs)
+
+
+def search_slots(db: Session, req: SlotSearchRequest, now: datetime) -> SlotSearchResult:
+    """now 是台灣當地時間、不帶時區（跟課程資料表的存法一致）。"""
+    venues = _load_venues(db, req.venue_ids)
+    days = [req.date_from + timedelta(days=i) for i in range((req.date_to - req.date_from).days + 1)]
+    windows = [
+        TimeWindow(start=datetime.combine(d, req.time_from), end=datetime.combine(d, req.time_to))
+        for d in days
+    ]
+    busy = _load_busy(db, days)
 
     result = find_slots(
         busy=busy,
         windows=windows,
         venue_ids=set(req.venue_ids),
         duration_minutes=req.duration_minutes,
-        travel=make_travel_lookup(pairs),
+        travel=_load_travel(db),
         now=now,
     )
 
@@ -186,3 +199,95 @@ def search_slots(db: Session, req: SlotSearchRequest, now: datetime) -> SlotSear
         open_blocks=open_blocks,
         message=build_message(anchored, open_blocks),
     )
+
+
+# ---- 固定時段排課（每週同一天、同一時段，連續 N 週）----
+
+MAX_WEEKS = 20
+
+
+class RecurringSearchRequest(BaseModel):
+    weekday: int = Field(ge=0, le=6)  # 週一=0 … 週日=6（跟 Python date.weekday() 一致）
+    date_from: date  # 從這天（含）之後的第一個指定星期開始
+    weeks: int = Field(8, ge=1, le=MAX_WEEKS)
+    time_from: time = WORK_START
+    time_to: time = WORK_END
+    venue_ids: list[int] = Field(min_length=1)
+    duration_minutes: int = Field(60, ge=30, le=240)
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.time_to <= self.time_from:
+            raise ValueError("結束時間要晚於開始時間")
+        return self
+
+
+class SkippedWeekOut(BaseModel):
+    date: date
+    reason: str  # 只給教練看
+
+
+class RecurringOptionOut(BaseModel):
+    venue_id: int
+    venue_name: str
+    start_time: time
+    end_time: time
+    dates: list[date]
+    skipped: list[SkippedWeekOut]
+    adjacent_weeks: int
+    same_venue_weeks: int
+    message: str  # 選這個方案時，直接給學生看的訊息
+
+
+class RecurringSearchResult(BaseModel):
+    first_date: date
+    weeks: int
+    options: list[RecurringOptionOut]
+
+
+def _md(d: date) -> str:
+    return f"{d.month}/{d.day}"
+
+
+def build_recurring_message(weekday: int, option: RecurringOptionOut) -> str:
+    """給學生的訊息：只寫日期時段場館，不寫跳過的原因（可能牽涉其他學生）。"""
+    lines = [
+        f"每週{WEEKDAY_ZH[weekday]} {option.start_time:%H:%M}-{option.end_time:%H:%M} "
+        f"{option.venue_name}，共 {len(option.dates)} 堂：",
+        "、".join(_md(d) for d in option.dates),
+    ]
+    if option.skipped:
+        paused = "、".join(_md(s.date) for s in option.skipped)
+        lines.append(f"（{paused} 那週暫停，往後補上）")
+    return "\n".join(lines)
+
+
+def search_recurring(db: Session, req: RecurringSearchRequest, now: datetime) -> RecurringSearchResult:
+    venues = _load_venues(db, req.venue_ids)
+    first_date = req.date_from + timedelta(days=(req.weekday - req.date_from.weekday()) % 7)
+    days = weekly_dates(first_date, req.weeks + MAX_POSTPONE)
+
+    options = find_recurring(
+        busy=_load_busy(db, days),
+        first_date=first_date,
+        weeks=req.weeks,
+        time_from=req.time_from,
+        time_to=req.time_to,
+        venue_ids=set(req.venue_ids),
+        duration_minutes=req.duration_minutes,
+        travel=_load_travel(db),
+        now=now,
+        venue_names={v_id: v.name for v_id, v in venues.items()},
+    )
+
+    out = []
+    for o in options:
+        item = RecurringOptionOut(
+            **o.model_dump(exclude={"skipped"}),
+            skipped=[SkippedWeekOut(**s.model_dump()) for s in o.skipped],
+            venue_name=venues[o.venue_id].name,
+            message="",
+        )
+        item.message = build_recurring_message(req.weekday, item)
+        out.append(item)
+    return RecurringSearchResult(first_date=first_date, weeks=req.weeks, options=out)

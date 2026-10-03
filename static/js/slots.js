@@ -1,6 +1,7 @@
 // 找空檔頁邏輯：選日期範圍／時段／場館／時長 → 找空檔 → 複製訊息給學生
 
 let venues = [];
+let venuesReady = null;
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -32,8 +33,9 @@ function setDefaultDates() {
   document.getElementById("f-date-to").value = toLocalDateString(to);
 }
 
-function renderVenueChecks(checkedIds) {
-  document.getElementById("venue-checks").innerHTML = venues
+// containerId：單次找空檔用 venue-checks，固定時段用 r-venue-checks
+function renderVenueChecks(checkedIds, containerId = "venue-checks") {
+  document.getElementById(containerId).innerHTML = venues
     .map(
       (v) => `<label><input type="checkbox" value="${v.id}" ${
         checkedIds.includes(v.id) ? "checked" : ""
@@ -42,9 +44,9 @@ function renderVenueChecks(checkedIds) {
     .join("");
 }
 
-async function renderAreaButtons() {
+async function renderAreaButtons(buttonsId = "area-buttons", checksId = "venue-checks") {
   const presets = await api.get("/api/slot-search/areas");
-  const box = document.getElementById("area-buttons");
+  const box = document.getElementById(buttonsId);
   box.innerHTML = Object.entries(presets)
     .filter(([, ids]) => ids.length > 0)
     .map(
@@ -53,7 +55,7 @@ async function renderAreaButtons() {
     )
     .join("");
   box.querySelectorAll("button").forEach((btn) =>
-    btn.addEventListener("click", () => renderVenueChecks(btn.dataset.ids.split(",").map(Number)))
+    btn.addEventListener("click", () => renderVenueChecks(btn.dataset.ids.split(",").map(Number), checksId))
   );
 }
 
@@ -201,7 +203,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     })
   );
 
-  venues = await api.get("/api/venues");
+  // slots_recurring.js 也要用場館清單，等這個 Promise 就好，不用再抓一次
+  venuesReady = api.get("/api/venues");
+  venues = await venuesReady;
   renderVenueChecks(venues.map((v) => v.id));
   await renderAreaButtons();
   await loadTravelTimes();

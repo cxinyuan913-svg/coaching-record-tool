@@ -114,3 +114,48 @@ def test_invalid_requests(api, extra):
     create_venue(api)
     body = {"date_from": "2030-01-07", "date_to": "2030-01-07", "venue_ids": [1], **extra}
     assert api.post("/api/slot-search", json=body).status_code == 422
+
+
+# ---- 固定時段排課 POST /api/slot-search/recurring ----
+
+def test_recurring_finds_weekly_slot_with_postpone_and_message(api):
+    s = create_student(api)["id"]
+    v = create_venue(api, "快羽會館")["id"]
+    # 2030-01-07 是週一 → 第一個週六是 1/12；第二週（1/19）16:00 已經有課
+    add_lesson(s, v, time(16), day=date(2030, 1, 19))
+    res = api.post("/api/slot-search/recurring", json={
+        "weekday": 5, "date_from": "2030-01-07", "weeks": 8,
+        "time_from": "16:00", "time_to": "17:00", "venue_ids": [v],
+    })
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["first_date"] == "2030-01-12"
+    [opt] = body["options"]
+    assert opt["start_time"] == "16:00:00" and opt["venue_name"] == "快羽會館"
+    assert [sk["date"] for sk in opt["skipped"]] == ["2030-01-19"]
+    assert opt["dates"][0] == "2030-01-12" and opt["dates"][-1] == "2030-03-09"
+    # 給學生的訊息不寫跳過的原因（可能牽涉其他學生）
+    assert opt["message"] == (
+        "每週六 16:00-17:00 快羽會館，共 8 堂：\n"
+        "1/12、1/26、2/2、2/9、2/16、2/23、3/2、3/9\n"
+        "（1/19 那週暫停，往後補上）"
+    )
+
+
+def test_recurring_first_date_can_be_same_day(api):
+    v = create_venue(api)["id"]
+    body = api.post("/api/slot-search/recurring", json={
+        "weekday": 0, "date_from": "2030-01-07", "weeks": 2, "venue_ids": [v],
+    }).json()
+    assert body["first_date"] == "2030-01-07"  # 起始日本身就是週一
+    assert body["options"][0]["message"].startswith("每週一 08:00-09:00")
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{"weekday": 7}, {"weeks": 21}, {"weeks": 0}, {"venue_ids": [999]}, {"time_from": "18:00", "time_to": "17:00"}],
+)
+def test_recurring_invalid_requests(api, extra):
+    create_venue(api)
+    body = {"weekday": 5, "date_from": "2030-01-07", "venue_ids": [1], **extra}
+    assert api.post("/api/slot-search/recurring", json=body).status_code == 422

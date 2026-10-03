@@ -23,6 +23,12 @@
       <h1>找空檔</h1>
     </div>
 
+    <div class="tab-bar" id="tab-bar">
+      <button type="button" class="tab active" data-tab="tab-single">單次找空檔</button>
+      <button type="button" class="tab" data-tab="tab-recurring">固定時段（多週）</button>
+    </div>
+
+    <div id="tab-single">
     <div class="section-block">
       <div class="panel">
         <div class="form-row">
@@ -80,6 +86,70 @@
       </div>
     </div>
 
+    </div>
+
+    <div id="tab-recurring" hidden>
+      <div class="section-block">
+        <div class="panel">
+          <p class="hint" style="margin-top: 0">
+            找「每週同一天、同一個時段、同一個場館」連續好幾週都能上的課。某週撞課或趕不到時會自動順延一週（最多 2 週）湊滿堂數。
+          </p>
+          <div class="form-row">
+            <label>每週</label>
+            <div class="inline-row">
+              <select id="r-weekday">
+                <option value="0">週一</option>
+                <option value="1">週二</option>
+                <option value="2">週三</option>
+                <option value="3">週四</option>
+                <option value="4">週五</option>
+                <option value="5" selected>週六</option>
+                <option value="6">週日</option>
+              </select>
+              <span>從</span>
+              <input id="r-date-from" type="date" />
+              <span>起，連續</span>
+              <input id="r-weeks" type="number" min="1" max="20" value="8" class="travel-input" />
+              <span>週</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>時段</label>
+            <div class="check-list">
+              <label><input type="radio" name="r-time-preset" value="08:00-22:30" checked />全天</label>
+              <label><input type="radio" name="r-time-preset" value="08:00-12:00" />早上</label>
+              <label><input type="radio" name="r-time-preset" value="12:00-18:00" />下午</label>
+              <label><input type="radio" name="r-time-preset" value="18:00-22:30" />晚上</label>
+              <label><input type="radio" name="r-time-preset" value="custom" />自訂</label>
+            </div>
+            <div class="inline-row" id="r-custom-time" hidden>
+              <input id="r-time-from" type="time" value="18:00" step="3600" />
+              <span>到</span>
+              <input id="r-time-to" type="time" value="22:00" step="3600" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label>場館</label>
+            <div class="inline-row" id="r-area-buttons"></div>
+            <div id="r-venue-checks" class="check-list"></div>
+          </div>
+          <div class="form-row">
+            <label for="r-duration">課程時長</label>
+            <select id="r-duration"></select>
+          </div>
+          <div class="panel-actions">
+            <button id="btn-recurring">找固定時段</button>
+            <span id="r-status" class="hint"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block" id="r-result-block" hidden>
+        <h2 id="r-result-title">結果</h2>
+        <div id="r-options"></div>
+      </div>
+    </div>
+
     <div class="section-block">
       <details id="travel-details">
         <summary><strong>場館車程表</strong> <span class="hint">（沒填的組合不會排跨館候選）</span></summary>
@@ -99,5 +169,6 @@
 
   <script src="/static/js/common.js"></script>
   <script src="/static/js/slots.js"></script>
+  <script src="/static/js/slots_recurring.js"></script>
 </body>
 </html>
