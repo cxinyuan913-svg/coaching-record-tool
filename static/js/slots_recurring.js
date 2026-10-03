@@ -1,12 +1,52 @@
-// 固定時段排課分頁：每週同一天、同一時段、同一場館，連續 N 週
-// 共用 slots.js 的 venues、venuesReady、escapeHtml、renderVenueChecks、renderAreaButtons
+// 固定時段排課分頁：每週同一天，連續 N 週
+// - 不指定希望時段：自動推薦前 10 名（POST /api/slot-search/recurring）
+// - 指定希望時段：逐週排排看，撞課時選同館替代時段、可接課時提醒（POST .../recurring/plan）
+// 共用 slots.js 的 venues、venuesReady、escapeHtml、renderVenueChecks、renderAreaButtons，
+// 以及 common.js 的 chineseNumber（跟課程套組頁的學生訊息同一個格式）
 
 const WEEKDAY_NAMES = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"];
+const WEEKDAY_SHORT = "日一二三四五六"; // 對應 JS getDay()，週日=0
 
-// API 回傳的日期是 YYYY-MM-DD，直接切字串，不經過 Date 物件避免時區偏移
+let currentPlan = null; // 逐週排排看的 API 結果
+let planChoices = []; // 每週的選擇：{kind: "pref" | "suggest" | "alt" | "skip", alt: 索引}
+
+// API 回傳的日期是 YYYY-MM-DD，直接切字串，不經過 Date 物件換算避免時區偏移
 function md(dateString) {
   const [, m, d] = dateString.split("-").map(Number);
   return `${m}/${d}`;
+}
+
+function mdWithWeekday(dateString) {
+  const [y, m, d] = dateString.split("-").map(Number);
+  return `${m}/${d}（${WEEKDAY_SHORT[new Date(y, m - 1, d).getDay()]}）`;
+}
+
+function hhmm(timeString) {
+  return timeString.slice(0, 5);
+}
+
+// 跟課程套組頁「課程訊息」同一個格式，學生還沒付款所以不放付費日期跟匯款資訊
+function buildLessonsMessage(venueName, lessons) {
+  const lines = [`地點：${venueName}`];
+  lessons.forEach((l, i) => {
+    lines.push(`第${chineseNumber(i + 1)}堂課：${mdWithWeekday(l.date)}${hhmm(l.start)}～${hhmm(l.end)}`);
+  });
+  return lines.join("\n");
+}
+
+async function copyText(text, statusEl) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    // 非 HTTPS 環境 clipboard API 不能用，退回暫時 textarea 選取後複製
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  statusEl.textContent = "已複製";
 }
 
 function switchTab(tabId) {
@@ -28,25 +68,39 @@ async function searchRecurring() {
   const venueIds = [...document.querySelectorAll("#r-venue-checks input:checked")].map((el) =>
     Number(el.value)
   );
+  const preferred = document.getElementById("r-preferred").value;
   if (venueIds.length === 0) {
     status.textContent = "請至少勾選一個場館";
     return;
   }
+  if (preferred && venueIds.length !== 1) {
+    status.textContent = "指定希望時段時，請只勾一個場館（只在同一個館換時段）";
+    return;
+  }
   const [timeFrom, timeTo] = recurringTimeRange();
+  const common = {
+    weekday: Number(document.getElementById("r-weekday").value),
+    date_from: document.getElementById("r-date-from").value,
+    weeks: Number(document.getElementById("r-weeks").value),
+    time_from: timeFrom,
+    time_to: timeTo,
+    duration_minutes: Number(document.getElementById("r-duration").value),
+  };
   const button = document.getElementById("btn-recurring");
   button.disabled = true;
   status.textContent = "查詢中…";
   try {
-    const result = await api.post("/api/slot-search/recurring", {
-      weekday: Number(document.getElementById("r-weekday").value),
-      date_from: document.getElementById("r-date-from").value,
-      weeks: Number(document.getElementById("r-weeks").value),
-      time_from: timeFrom,
-      time_to: timeTo,
-      venue_ids: venueIds,
-      duration_minutes: Number(document.getElementById("r-duration").value),
-    });
-    renderRecurring(result);
+    if (preferred) {
+      const result = await api.post("/api/slot-search/recurring/plan", {
+        ...common,
+        preferred_start: preferred,
+        venue_id: venueIds[0],
+      });
+      startPlan(result);
+    } else {
+      const result = await api.post("/api/slot-search/recurring", { ...common, venue_ids: venueIds });
+      renderRecurring(result);
+    }
     status.textContent = "";
   } catch (e) {
     status.textContent = `失敗：${e.message}`;
@@ -55,16 +109,18 @@ async function searchRecurring() {
   }
 }
 
+// ---- 不指定時段：自動推薦 ----
+
 function optionSummary(o, weeks) {
-  const parts = [
+  return [
     o.skipped.length === 0 ? `${weeks} 週全部可以` : `需順延 ${o.skipped.length} 週`,
     `同館接課 ${o.adjacent_weeks} 週`,
     `當天本來就在這館 ${o.same_venue_weeks} 週`,
-  ];
-  return parts.join("｜");
+  ].join("｜");
 }
 
 function renderRecurring(result) {
+  document.getElementById("r-plan-block").hidden = true;
   const weekday = WEEKDAY_NAMES[Number(document.getElementById("r-weekday").value)];
   document.getElementById("r-result-title").textContent =
     `結果：${md(result.first_date)} 起每${weekday}，連續 ${result.weeks} 週`;
@@ -76,7 +132,7 @@ function renderRecurring(result) {
       .map(
         (o, i) => `<div class="panel recurring-option">
           <div class="recurring-head">
-            <strong>#${i + 1}　${weekday} ${o.start_time.slice(0, 5)}-${o.end_time.slice(0, 5)}　${escapeHtml(o.venue_name)}</strong>
+            <strong>#${i + 1}　${weekday} ${hhmm(o.start_time)}-${hhmm(o.end_time)}　${escapeHtml(o.venue_name)}</strong>
             <span class="hint">${optionSummary(o, result.weeks)}</span>
           </div>
           <div>日期：${o.dates.map(md).join("、")}</div>
@@ -91,26 +147,115 @@ function renderRecurring(result) {
       )
       .join("");
     box.querySelectorAll("[data-copy]").forEach((btn) =>
-      btn.addEventListener("click", () => copyRecurring(result.options[Number(btn.dataset.copy)].message, btn.dataset.copy))
+      btn.addEventListener("click", () => {
+        const o = result.options[Number(btn.dataset.copy)];
+        const lessons = o.dates.map((d) => ({ date: d, start: o.start_time, end: o.end_time }));
+        copyText(buildLessonsMessage(o.venue_name, lessons), document.querySelector(`[data-copy-status="${btn.dataset.copy}"]`));
+      })
     );
   }
   document.getElementById("r-result-block").hidden = false;
 }
 
-async function copyRecurring(text, index) {
-  const status = document.querySelector(`[data-copy-status="${index}"]`);
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (e) {
-    // 非 HTTPS 環境 clipboard API 不能用，退回暫時 textarea 選取後複製
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
+// ---- 指定時段：逐週排排看 ----
+
+function startPlan(result) {
+  document.getElementById("r-result-block").hidden = true;
+  currentPlan = result;
+  // 預設：指定時段可以就用指定時段；撞課就先選最方便的替代時段；都沒有就跳過
+  planChoices = result.week_plans.map((w) => {
+    if (w.preferred_ok) return { kind: "pref" };
+    if (w.alternatives.length) return { kind: "alt", alt: 0 };
+    return { kind: "skip" };
+  });
+  const weekday = WEEKDAY_NAMES[Number(document.getElementById("r-weekday").value)];
+  document.getElementById("r-plan-title").textContent =
+    `逐週排排看：每${weekday} ${hhmm(result.preferred_start)}～${hhmm(result.preferred_end)}　${result.venue_name}，共 ${result.weeks} 堂`;
+  document.getElementById("r-plan-copy-status").textContent = "";
+  renderPlan();
+  document.getElementById("r-plan-block").hidden = false;
+}
+
+function chosenSlot(w, c) {
+  if (c.kind === "pref") return { start: currentPlan.preferred_start, end: currentPlan.preferred_end };
+  if (c.kind === "suggest") return { start: w.suggestion.start_time, end: w.suggestion.end_time };
+  if (c.kind === "alt") return { start: w.alternatives[c.alt].start_time, end: w.alternatives[c.alt].end_time };
+  return null;
+}
+
+// 照順序取「不跳過」的週，取滿 weeks 堂為止；跳過幾週就往後順延幾週（最多到 API 多給的那 2 週）
+function visibleWeekCount() {
+  let lessons = 0;
+  for (let i = 0; i < currentPlan.week_plans.length; i++) {
+    if (planChoices[i].kind !== "skip") lessons += 1;
+    if (lessons === currentPlan.weeks) return i + 1;
   }
-  status.textContent = "已複製";
+  return currentPlan.week_plans.length;
+}
+
+function radio(i, value, label, checked, disabled = false) {
+  return `<label class="plan-choice${disabled ? " disabled" : ""}">
+    <input type="radio" name="plan-${i}" value="${value}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />${label}
+  </label>`;
+}
+
+function renderPlan() {
+  const count = visibleWeekCount();
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    const w = currentPlan.week_plans[i];
+    const c = planChoices[i];
+    const prefLabel = `${hhmm(currentPlan.preferred_start)}～${hhmm(currentPlan.preferred_end)}（指定時段${w.preferred_adjacent ? "，剛好接課" : ""}）`;
+    const options = [radio(i, "pref", prefLabel, c.kind === "pref", !w.preferred_ok)];
+    if (w.suggestion) {
+      options.push(
+        radio(i, "suggest", `💡 改 ${hhmm(w.suggestion.start_time)}～${hhmm(w.suggestion.end_time)}，${escapeHtml(w.suggestion.note)}，比較方便`, c.kind === "suggest")
+      );
+    }
+    w.alternatives.forEach((a, k) => {
+      options.push(
+        radio(i, `alt-${k}`, `${hhmm(a.start_time)}～${hhmm(a.end_time)}（${escapeHtml(a.note)}）`, c.kind === "alt" && c.alt === k)
+      );
+    });
+    options.push(radio(i, "skip", "這週跳過，往後順延一週", c.kind === "skip"));
+
+    const notes = [];
+    if (!w.preferred_ok) notes.push(`⚠ 指定時段不行：${escapeHtml(w.preferred_reason)}`);
+    if (w.suggestion) notes.push("💡 這天前後有課可以接");
+    notes.push(
+      w.day_busy.length
+        ? `當天已有：${w.day_busy.map((b) => `${hm(b.start)}-${hm(b.end)} ${escapeHtml(b.venue_name)}`).join("、")}`
+        : "當天沒有其他課"
+    );
+    const extra = i >= currentPlan.weeks ? `<div class="hint">順延補課</div>` : "";
+    rows.push(`<tr class="${w.preferred_ok ? "" : "plan-clash"}">
+      <td>${mdWithWeekday(w.date)}${extra}</td>
+      <td>${options.join("")}</td>
+      <td class="hint">${notes.join("<br />")}</td>
+    </tr>`);
+  }
+  const tbody = document.getElementById("r-plan-rows");
+  tbody.innerHTML = rows.join("");
+  tbody.querySelectorAll('input[type="radio"]').forEach((el) =>
+    el.addEventListener("change", () => {
+      const i = Number(el.name.split("-")[1]);
+      planChoices[i] = el.value.startsWith("alt-")
+        ? { kind: "alt", alt: Number(el.value.slice(4)) }
+        : { kind: el.value };
+      renderPlan();
+    })
+  );
+
+  const lessons = [];
+  for (let i = 0; i < count; i++) {
+    const slot = chosenSlot(currentPlan.week_plans[i], planChoices[i]);
+    if (slot) lessons.push({ date: currentPlan.week_plans[i].date, ...slot });
+  }
+  document.getElementById("r-plan-warning").textContent =
+    lessons.length < currentPlan.weeks
+      ? `⚠ 目前只排得到 ${lessons.length} 堂（最多順延 2 週），還差 ${currentPlan.weeks - lessons.length} 堂，請改選替代時段或減少週數。`
+      : "";
+  document.getElementById("r-plan-message").value = buildLessonsMessage(currentPlan.venue_name, lessons);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -123,6 +268,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("r-date-from").value = toLocalDateString(tomorrow);
   populateDurationSelect("r-duration", 240);
   document.getElementById("r-duration").value = "60";
+  const preferred = document.getElementById("r-preferred");
+  preferred.innerHTML =
+    `<option value="">不指定（自動推薦）</option>` +
+    Array.from({ length: 14 }, (_, k) => {
+      const h = String(8 + k).padStart(2, "0");
+      return `<option value="${h}:00">${h}:00</option>`;
+    }).join("");
   document.querySelectorAll('input[name="r-time-preset"]').forEach((el) =>
     el.addEventListener("change", () => {
       document.getElementById("r-custom-time").hidden = el.value !== "custom" || !el.checked;
@@ -133,4 +285,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderVenueChecks(venues.map((v) => v.id), "r-venue-checks");
   await renderAreaButtons("r-area-buttons", "r-venue-checks");
   document.getElementById("btn-recurring").addEventListener("click", searchRecurring);
+  document.getElementById("btn-plan-copy").addEventListener("click", () =>
+    copyText(document.getElementById("r-plan-message").value, document.getElementById("r-plan-copy-status"))
+  );
 });

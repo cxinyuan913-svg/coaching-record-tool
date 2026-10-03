@@ -152,3 +152,124 @@ def find_recurring(
 
     options.sort(key=lambda o: (len(o.skipped), -o.adjacent_weeks, -o.same_venue_weeks, o.start_time, o.venue_id))
     return options[:MAX_OPTIONS]
+
+
+# ---- 指定時段逐週排排看 ----
+#
+# 教練先指定「每週六 10:00、快羽」，系統逐週檢查並提示：
+# - 撞課／趕不到：列出當天同一個館其他可行的時段，最方便的排前面（教練決定只在
+#   同一個館換時段，不換館）。
+# - 有空但當天前後 2 小時內有課可以接：提示改成接課比較方便（例如 8–9 有課，
+#   10–11 雖然空著，改 9–10 就能接在一起）。
+#
+# 接課的候選跟著既有課程的時間走（13:30 下課就從 13:30 開始），其他空檔只用整點。
+
+SUGGEST_WITHIN = timedelta(hours=2)
+MAX_ALTERNATIVES = 4
+
+
+class SlotChoice(BaseModel):
+    start_time: time
+    end_time: time
+    adjacent: bool  # 緊接同館既有課程前後
+    note: str  # 給教練看的說明，例如「接在 08:00-09:00 那堂後面」
+
+
+class WeekPlan(BaseModel):
+    date: date
+    preferred_ok: bool
+    preferred_adjacent: bool
+    preferred_reason: str | None  # 不行的原因（只給教練看）
+    suggestion: SlotChoice | None  # 指定時段可以，但改這個能接課比較方便
+    alternatives: list[SlotChoice]  # 指定時段不行時，當天同館其他可行時段
+    day_busy: list[BusySlot]  # 當天已占用的時段（不限場館），給教練參考
+
+
+def _adjacent_note(start: datetime, end: datetime, here: list[BusySlot]) -> str:
+    for s in here:
+        if s.end == start:
+            return f"接在 {s.start:%H:%M}-{s.end:%H:%M} 那堂後面"
+        if s.start == end:
+            return f"接在 {s.start:%H:%M}-{s.end:%H:%M} 那堂前面"
+    return ""
+
+
+def plan_weeks(
+    *,
+    busy: list[BusySlot],
+    first_date: date,
+    weeks: int,
+    preferred_start: time,
+    venue_id: int,
+    time_from: time,
+    time_to: time,
+    duration_minutes: int,
+    travel: TravelLookup,
+    now: datetime,
+    venue_names: dict[int, str] | None = None,
+) -> list[WeekPlan]:
+    """回傳 weeks + MAX_POSTPONE 週的逐週狀況，多出來的週給「這週跳過、往後順延」用。"""
+    venue_names = venue_names or {}
+    duration = timedelta(minutes=duration_minutes)
+    plans: list[WeekPlan] = []
+    for d in weekly_dates(first_date, weeks + MAX_POSTPONE):
+        day_busy = sorted((s for s in busy if s.start.date() == d), key=lambda s: s.start)
+        here = [s for s in day_busy if s.venue_id == venue_id]
+        window = [TimeWindow(start=datetime.combine(d, time_from), end=datetime.combine(d, time_to))]
+        pref_start = datetime.combine(d, preferred_start)
+
+        def ok(start: datetime) -> bool:
+            return _is_candidate(start, start + duration, venue_id, window, day_busy, travel, now)
+
+        def choice(start: datetime) -> SlotChoice:
+            end = start + duration
+            note = _adjacent_note(start, end, here)
+            return SlotChoice(start_time=start.time(), end_time=end.time(), adjacent=bool(note), note=note or "空檔")
+
+        # 同館接課的候選：每堂既有課程的前後
+        adjacent: dict[datetime, SlotChoice] = {}
+        for s in here:
+            for start in (s.end, s.start - duration):
+                if start.date() == d and ok(start):
+                    adjacent.setdefault(start, choice(start))
+
+        preferred_ok = ok(pref_start)
+        preferred_adjacent = preferred_ok and bool(_adjacent_note(pref_start, pref_start + duration, here))
+
+        def distance(c: SlotChoice) -> timedelta:
+            return abs(datetime.combine(d, c.start_time) - pref_start)
+
+        suggestion = None
+        alternatives: list[SlotChoice] = []
+        reason = None
+        if preferred_ok:
+            if not preferred_adjacent:
+                near = [c for start, c in adjacent.items() if start != pref_start and distance(c) <= SUGGEST_WITHIN]
+                if near:
+                    suggestion = min(near, key=lambda c: (distance(c), c.start_time))
+        else:
+            reason = _explain(pref_start, pref_start + duration, venue_id, day_busy, travel, venue_names, now)
+            free: list[SlotChoice] = []
+            t = datetime.combine(d, max(time_from, WORK_START))
+            if t.minute or t.second:
+                t = t.replace(minute=0, second=0) + STEP
+            while t.time() < time_to and t + duration <= datetime.combine(d, WORK_END):
+                if t not in adjacent and ok(t):
+                    free.append(choice(t))
+                t += STEP
+            ranked_adjacent = sorted(adjacent.values(), key=lambda c: (distance(c), c.start_time))
+            ranked_free = sorted(free, key=lambda c: (distance(c), c.start_time))
+            alternatives = (ranked_adjacent + ranked_free)[:MAX_ALTERNATIVES]
+
+        plans.append(
+            WeekPlan(
+                date=d,
+                preferred_ok=preferred_ok,
+                preferred_adjacent=preferred_adjacent,
+                preferred_reason=reason,
+                suggestion=suggestion,
+                alternatives=alternatives,
+                day_busy=day_busy,
+            )
+        )
+    return plans

@@ -490,3 +490,21 @@ nav.topnav a.nav-logout {
   gap: 4px 12px;
   margin-bottom: 6px;
 }
+
+/* 逐週排排看 */
+.plan-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.plan-choice.disabled {
+  color: #aaa;
+  text-decoration: line-through;
+}
+
+#r-plan-rows tr.plan-clash td:first-child {
+  border-left: 3px solid #f0a030;
+}

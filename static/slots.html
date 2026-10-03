@@ -137,6 +137,11 @@
             <label for="r-duration">課程時長</label>
             <select id="r-duration"></select>
           </div>
+          <div class="form-row">
+            <label for="r-preferred">希望開始時間（選填）</label>
+            <select id="r-preferred"></select>
+            <span class="hint">不指定：自動推薦前 10 名。指定（只能勾一個場館）：照這個時段逐週排排看，撞課時列出同館其他時段，有課可以接時會提醒。</span>
+          </div>
           <div class="panel-actions">
             <button id="btn-recurring">找固定時段</button>
             <span id="r-status" class="hint"></span>
@@ -147,6 +152,23 @@
       <div class="section-block" id="r-result-block" hidden>
         <h2 id="r-result-title">結果</h2>
         <div id="r-options"></div>
+      </div>
+
+      <div class="section-block" id="r-plan-block" hidden>
+        <h2 id="r-plan-title">逐週排排看</h2>
+        <table>
+          <thead>
+            <tr><th>日期</th><th>安排</th><th>說明（只有你看得到）</th></tr>
+          </thead>
+          <tbody id="r-plan-rows"></tbody>
+        </table>
+        <p class="hint" id="r-plan-warning"></p>
+        <h2 style="margin-top: 20px">給學生的訊息</h2>
+        <textarea id="r-plan-message" class="panel-textarea" rows="11"></textarea>
+        <div class="panel-actions">
+          <button type="button" id="btn-plan-copy">複製</button>
+          <span class="hint" id="r-plan-copy-status"></span>
+        </div>
       </div>
     </div>
 

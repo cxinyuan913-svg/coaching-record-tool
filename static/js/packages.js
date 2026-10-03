@@ -398,15 +398,7 @@ async function handleSettleAll() {
   }
 }
 
-// 課程訊息產生（可直接貼給學生）
-function chineseNumber(n) {
-  const digits = "〇一二三四五六七八九";
-  if (n < 10) return digits[n];
-  if (n < 20) return "十" + (n > 10 ? digits[n - 10] : "");
-  const tens = Math.floor(n / 10);
-  const ones = n % 10;
-  return digits[tens] + "十" + (ones ? digits[ones] : "");
-}
+// 課程訊息產生（可直接貼給學生）；chineseNumber 在 common.js（找空檔頁的訊息也用）
 
 function formatDateWithWeekday(dateStr) {
   const d = new Date(dateStr + "T00:00:00");

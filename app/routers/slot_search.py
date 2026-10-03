@@ -6,12 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.timeutil import now_taipei
 from app.booking_parser.slot_search import (
+    RecurringPlanRequest,
+    RecurringPlanResult,
     RecurringSearchRequest,
     RecurringSearchResult,
     SlotSearchNotAllowed,
     SlotSearchRequest,
     SlotSearchResult,
     area_presets,
+    plan_recurring,
     search_recurring,
     search_slots,
 )
@@ -48,5 +51,16 @@ def search_recurring_slots(
     """固定時段排課：每週同一天、同一時段、同一場館，連續 N 週（見 recurring_finder.py）。"""
     try:
         return search_recurring(db, payload, now)
+    except SlotSearchNotAllowed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/recurring/plan", response_model=RecurringPlanResult)
+def plan_recurring_slots(
+    payload: RecurringPlanRequest, db: Session = Depends(get_db), now: datetime = Depends(get_now)
+):
+    """指定時段逐週排排看：撞課時列出同館其他時段，可接課時提示（見 recurring_finder.plan_weeks）。"""
+    try:
+        return plan_recurring(db, payload, now)
     except SlotSearchNotAllowed as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -169,3 +169,13 @@ document.addEventListener(
   },
   { passive: true }
 );
+
+// 「第一堂課、第二堂課…」用的國字數字（課程套組頁與找空檔頁的學生訊息共用，格式才會一致）
+function chineseNumber(n) {
+  const digits = "〇一二三四五六七八九";
+  if (n < 10) return digits[n];
+  if (n < 20) return "十" + (n > 10 ? digits[n - 10] : "");
+  const tens = Math.floor(n / 10);
+  const ones = n % 10;
+  return digits[tens] + "十" + (ones ? digits[ones] : "");
+}

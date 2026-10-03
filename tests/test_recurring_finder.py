@@ -109,3 +109,64 @@ def test_postponed_dates_keep_weekly_rhythm():
     assert gaps == {7}
     assert option.dates[0] == SATURDAYS[1]
     assert option.dates[-1] == SATURDAYS[0] + timedelta(weeks=8)
+
+
+# ---- 指定時段逐週排排看 plan_weeks ----
+
+from app.booking_parser.recurring_finder import plan_weeks  # noqa: E402
+
+
+def plan(busy, preferred=time(10)):
+    return plan_weeks(
+        busy=busy, first_date=FIRST, weeks=8, preferred_start=preferred, venue_id=A,
+        time_from=time(8), time_to=time(22, 30), duration_minutes=60, travel=TRAVEL, now=NOW,
+        venue_names={A: "A館", B: "B館", C: "C館"},
+    )
+
+
+def hhmm(choices):
+    return [c.start_time.strftime("%H:%M") for c in choices]
+
+
+def test_plan_covers_extra_weeks_for_postpone():
+    weeks = plan([])
+    assert len(weeks) == 8 + MAX_POSTPONE
+    assert all(w.preferred_ok and w.suggestion is None and w.alternatives == [] for w in weeks)
+
+
+def test_free_but_lesson_two_hours_before_suggests_joining():
+    # 教練舉的例子：那週 8–9 有課，10–11 雖然空著，提醒改 9–10 接在一起
+    [week] = plan([lesson(A, FIRST, 8, 9)])[:1]
+    assert week.preferred_ok and not week.preferred_adjacent
+    assert week.suggestion.start_time == time(9)
+    assert week.suggestion.note == "接在 08:00-09:00 那堂後面"
+
+
+def test_no_suggestion_when_already_adjacent_or_too_far():
+    assert plan([lesson(A, FIRST, 9, 10)])[0].suggestion is None  # 本來就接在一起
+    assert plan([lesson(A, FIRST, 9, 10)])[0].preferred_adjacent
+    assert plan([lesson(A, FIRST, 15, 16)])[0].suggestion is None  # 差太多小時，不建議
+    assert plan([lesson(B, FIRST, 8, 9)])[0].suggestion is None  # 別館的課不算接課（只在同一個館換）
+
+
+def test_clash_lists_adjacent_first_then_nearest_free():
+    [week] = plan([lesson(A, FIRST, 10, 11)])[:1]
+    assert not week.preferred_ok
+    assert week.preferred_reason == "撞到 10:00-11:00 A館的課"
+    assert hhmm(week.alternatives) == ["09:00", "11:00", "08:00", "12:00"]
+    assert [c.adjacent for c in week.alternatives] == [True, True, False, False]
+
+
+def test_adjacent_alternative_follows_lesson_time_not_whole_hour():
+    busy = [BusySlot(lesson_id=999, venue_id=A,
+                     start=datetime.combine(FIRST, time(9, 30)), end=datetime.combine(FIRST, time(10, 30)))]
+    [week] = plan(busy)[:1]
+    # 接課跟著 10:30 下課；其他空檔仍只用整點
+    assert hhmm(week.alternatives) == ["10:30", "08:30", "11:00", "08:00"]
+
+
+def test_clash_by_travel_offers_same_venue_only():
+    [week] = plan([lesson(B, FIRST, 9, 10)])[:1]
+    assert week.preferred_reason == "前一堂 10:00 在B館下課，趕不過來"
+    assert hhmm(week.alternatives)[0] == "11:00"
+    assert not week.alternatives[0].adjacent

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app import models
-from app.booking_parser.recurring_finder import MAX_POSTPONE, find_recurring, weekly_dates
+from app.booking_parser.recurring_finder import MAX_POSTPONE, find_recurring, plan_weeks, weekly_dates
 from app.booking_parser.slot_finder import (
     WORK_END,
     WORK_START,
@@ -228,6 +228,8 @@ class SkippedWeekOut(BaseModel):
 
 
 class RecurringOptionOut(BaseModel):
+    """給學生的訊息由前端組（跟課程套組頁同一個格式），這裡只回結構化資料。"""
+
     venue_id: int
     venue_name: str
     start_time: time
@@ -236,7 +238,6 @@ class RecurringOptionOut(BaseModel):
     skipped: list[SkippedWeekOut]
     adjacent_weeks: int
     same_venue_weeks: int
-    message: str  # 選這個方案時，直接給學生看的訊息
 
 
 class RecurringSearchResult(BaseModel):
@@ -245,26 +246,13 @@ class RecurringSearchResult(BaseModel):
     options: list[RecurringOptionOut]
 
 
-def _md(d: date) -> str:
-    return f"{d.month}/{d.day}"
-
-
-def build_recurring_message(weekday: int, option: RecurringOptionOut) -> str:
-    """給學生的訊息：只寫日期時段場館，不寫跳過的原因（可能牽涉其他學生）。"""
-    lines = [
-        f"每週{WEEKDAY_ZH[weekday]} {option.start_time:%H:%M}-{option.end_time:%H:%M} "
-        f"{option.venue_name}，共 {len(option.dates)} 堂：",
-        "、".join(_md(d) for d in option.dates),
-    ]
-    if option.skipped:
-        paused = "、".join(_md(s.date) for s in option.skipped)
-        lines.append(f"（{paused} 那週暫停，往後補上）")
-    return "\n".join(lines)
+def _first_date(req_date_from: date, weekday: int) -> date:
+    return req_date_from + timedelta(days=(weekday - req_date_from.weekday()) % 7)
 
 
 def search_recurring(db: Session, req: RecurringSearchRequest, now: datetime) -> RecurringSearchResult:
     venues = _load_venues(db, req.venue_ids)
-    first_date = req.date_from + timedelta(days=(req.weekday - req.date_from.weekday()) % 7)
+    first_date = _first_date(req.date_from, req.weekday)
     days = weekly_dates(first_date, req.weeks + MAX_POSTPONE)
 
     options = find_recurring(
@@ -279,15 +267,99 @@ def search_recurring(db: Session, req: RecurringSearchRequest, now: datetime) ->
         now=now,
         venue_names={v_id: v.name for v_id, v in venues.items()},
     )
-
-    out = []
-    for o in options:
-        item = RecurringOptionOut(
+    out = [
+        RecurringOptionOut(
             **o.model_dump(exclude={"skipped"}),
-            skipped=[SkippedWeekOut(**s.model_dump()) for s in o.skipped],
+            skipped=[SkippedWeekOut(**sk.model_dump()) for sk in o.skipped],
             venue_name=venues[o.venue_id].name,
-            message="",
         )
-        item.message = build_recurring_message(req.weekday, item)
-        out.append(item)
+        for o in options
+    ]
     return RecurringSearchResult(first_date=first_date, weeks=req.weeks, options=out)
+
+
+# ---- 指定時段逐週排排看 ----
+
+class RecurringPlanRequest(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    date_from: date
+    weeks: int = Field(8, ge=1, le=MAX_WEEKS)
+    preferred_start: time  # 教練希望的開始時間，例如 10:00
+    venue_id: int  # 只在同一個館換時段（教練決定）
+    time_from: time = WORK_START  # 撞課時替代時段的範圍
+    time_to: time = WORK_END
+    duration_minutes: int = Field(60, ge=30, le=240)
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.time_to <= self.time_from:
+            raise ValueError("結束時間要晚於開始時間")
+        return self
+
+
+class SlotChoiceOut(BaseModel):
+    start_time: time
+    end_time: time
+    adjacent: bool
+    note: str
+
+
+class WeekPlanOut(BaseModel):
+    date: date
+    preferred_ok: bool
+    preferred_adjacent: bool
+    preferred_reason: str | None
+    suggestion: SlotChoiceOut | None
+    alternatives: list[SlotChoiceOut]
+    day_busy: list[BusyOut]  # 只給教練參考
+
+
+class RecurringPlanResult(BaseModel):
+    first_date: date
+    weeks: int  # 要排滿幾堂；week_plans 會多回 MAX_POSTPONE 週給順延用
+    venue_id: int
+    venue_name: str
+    preferred_start: time
+    preferred_end: time
+    week_plans: list[WeekPlanOut]
+
+
+def plan_recurring(db: Session, req: RecurringPlanRequest, now: datetime) -> RecurringPlanResult:
+    venues = _load_venues(db, [req.venue_id])
+    first_date = _first_date(req.date_from, req.weekday)
+    days = weekly_dates(first_date, req.weeks + MAX_POSTPONE)
+    plans = plan_weeks(
+        busy=_load_busy(db, days),
+        first_date=first_date,
+        weeks=req.weeks,
+        preferred_start=req.preferred_start,
+        venue_id=req.venue_id,
+        time_from=req.time_from,
+        time_to=req.time_to,
+        duration_minutes=req.duration_minutes,
+        travel=_load_travel(db),
+        now=now,
+        venue_names={v_id: v.name for v_id, v in venues.items()},
+    )
+    week_plans = [
+        WeekPlanOut(
+            **p.model_dump(exclude={"day_busy", "suggestion", "alternatives"}),
+            suggestion=SlotChoiceOut(**p.suggestion.model_dump()) if p.suggestion else None,
+            alternatives=[SlotChoiceOut(**c.model_dump()) for c in p.alternatives],
+            day_busy=[
+                BusyOut(venue_id=b.venue_id, venue_name=venues[b.venue_id].name, start=b.start, end=b.end)
+                for b in p.day_busy
+            ],
+        )
+        for p in plans
+    ]
+    preferred_end = (datetime.combine(first_date, req.preferred_start) + timedelta(minutes=req.duration_minutes)).time()
+    return RecurringPlanResult(
+        first_date=first_date,
+        weeks=req.weeks,
+        venue_id=req.venue_id,
+        venue_name=venues[req.venue_id].name,
+        preferred_start=req.preferred_start,
+        preferred_end=preferred_end,
+        week_plans=week_plans,
+    )

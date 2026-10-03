@@ -134,12 +134,8 @@ def test_recurring_finds_weekly_slot_with_postpone_and_message(api):
     assert opt["start_time"] == "16:00:00" and opt["venue_name"] == "快羽會館"
     assert [sk["date"] for sk in opt["skipped"]] == ["2030-01-19"]
     assert opt["dates"][0] == "2030-01-12" and opt["dates"][-1] == "2030-03-09"
-    # 給學生的訊息不寫跳過的原因（可能牽涉其他學生）
-    assert opt["message"] == (
-        "每週六 16:00-17:00 快羽會館，共 8 堂：\n"
-        "1/12、1/26、2/2、2/9、2/16、2/23、3/2、3/9\n"
-        "（1/19 那週暫停，往後補上）"
-    )
+    assert "撞到" in opt["skipped"][0]["reason"]
+    assert "message" not in opt  # 給學生的訊息由前端用課程套組的格式組
 
 
 def test_recurring_first_date_can_be_same_day(api):
@@ -148,7 +144,7 @@ def test_recurring_first_date_can_be_same_day(api):
         "weekday": 0, "date_from": "2030-01-07", "weeks": 2, "venue_ids": [v],
     }).json()
     assert body["first_date"] == "2030-01-07"  # 起始日本身就是週一
-    assert body["options"][0]["message"].startswith("每週一 08:00-09:00")
+    assert body["options"][0]["start_time"] == "08:00:00"
 
 
 @pytest.mark.parametrize(
@@ -159,3 +155,33 @@ def test_recurring_invalid_requests(api, extra):
     create_venue(api)
     body = {"weekday": 5, "date_from": "2030-01-07", "venue_ids": [1], **extra}
     assert api.post("/api/slot-search/recurring", json=body).status_code == 422
+
+
+# ---- 指定時段逐週排排看 POST /api/slot-search/recurring/plan ----
+
+def test_recurring_plan_week_by_week(api):
+    s = create_student(api)["id"]
+    v = create_venue(api, "快羽會館")["id"]
+    add_lesson(s, v, time(8), day=date(2030, 1, 12))   # 第 1 週 8–9 有課 → 提示改 9–10 接課
+    add_lesson(s, v, time(10), day=date(2030, 1, 19))  # 第 2 週 10–11 撞課 → 列替代時段
+    res = api.post("/api/slot-search/recurring/plan", json={
+        "weekday": 5, "date_from": "2030-01-07", "weeks": 8,
+        "preferred_start": "10:00", "venue_id": v,
+    })
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["venue_name"] == "快羽會館" and body["preferred_end"] == "11:00:00"
+    weeks = body["week_plans"]
+    assert len(weeks) == 10  # 8 週 + 最多順延 2 週
+    assert weeks[0]["preferred_ok"] and weeks[0]["suggestion"]["start_time"] == "09:00:00"
+    assert weeks[0]["day_busy"][0]["venue_name"] == "快羽會館"
+    assert not weeks[1]["preferred_ok"] and "撞到" in weeks[1]["preferred_reason"]
+    assert [c["start_time"] for c in weeks[1]["alternatives"]][:2] == ["09:00:00", "11:00:00"]
+    assert all(w["preferred_ok"] for w in weeks[2:])
+
+
+def test_recurring_plan_unknown_venue(api):
+    res = api.post("/api/slot-search/recurring/plan", json={
+        "weekday": 5, "date_from": "2030-01-07", "preferred_start": "10:00", "venue_id": 999,
+    })
+    assert res.status_code == 422
