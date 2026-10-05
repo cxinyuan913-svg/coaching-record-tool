@@ -4,8 +4,9 @@ const TIER_LABEL = { new: "新生", friend: "朋友", regular: "熟客" };
 const WEEKDAY_LABEL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 const STATUS_LABEL = { active: "進行中", completed: "已完成", expired: "已過期" };
 
-// 收款訊息固定附上的匯款資訊，之後帳戶異動直接改這裡即可
-const BANK_INFO = "匯款資訊：\n台灣土地銀行（005）\n帳號：***";
+// 收款訊息附上的匯款資訊：銀行帳號不放進程式碼（repo 會公開），存在伺服器上
+// 不進版控的 bank_info.txt，開啟課程訊息時才向 /api/settings/bank-info 讀取
+let bankInfo = null;
 
 let students = [];
 let venues = [];
@@ -432,11 +433,14 @@ function buildLineMessage(pkg, lessons) {
     );
   });
   lines.push("");
-  lines.push(BANK_INFO);
+  if (bankInfo) lines.push(bankInfo);
   return lines.join("\n");
 }
 
 async function openMessageModal(packageId) {
+  if (bankInfo === null) {
+    bankInfo = (await api.get("/api/settings/bank-info")).bank_info;
+  }
   const [pkg, lessons] = await Promise.all([
     api.get(`/api/packages/${packageId}`),
     api.get(`/api/packages/${packageId}/lessons`),

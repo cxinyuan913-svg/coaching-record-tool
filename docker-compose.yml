@@ -19,3 +19,4 @@ services:
       - ./scheduler_state.json:/app/scheduler_state.json
       - ./admin_password_hash.txt:/app/admin_password_hash.txt
       - ./session_secret.txt:/app/session_secret.txt
+      - ./bank_info.txt:/app/bank_info.txt

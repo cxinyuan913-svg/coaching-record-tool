@@ -18,6 +18,7 @@ from app.routers import (
     lessons,
     packages,
     price_rules,
+    settings,
     slot_search,
     stats,
     students,
@@ -52,6 +53,7 @@ app.include_router(integrations.router)
 app.include_router(booking_parser.router)
 app.include_router(venue_travel_times.router)
 app.include_router(slot_search.router)
+app.include_router(settings.router)
 
 # 測試會把 DATABASE_URL 指向暫存資料庫，此時不啟動背景排程，避免跟測試的
 # drop_all/create_all 互相干擾，也避免測試過程真的打出 Discord 通知

@@ -124,7 +124,7 @@ sudo usermod -aG docker $USER
 上去。**特別注意：`coaching.db`、`booking_api_token.txt`、
 `public_booking_api_token.txt`、`discord_webhook_url.txt`、
 `scheduler_state.json`、`admin_password_hash.txt`、`session_secret.txt`
-這七個檔案要一起帶上去**——不是重新建立空的，是把你現在本機真實在用
+這七個檔案要一起帶上去**（2026-10 起多一個 `bank_info.txt`，見下方）——不是重新建立空的，是把你現在本機真實在用
 的那幾份複製過去，不然資料會整個歸零、也登入不了。
 
 後兩個是網站登入用的（見 `app/web_auth.py`）：網站放上網路一定要有登入，
@@ -141,8 +141,17 @@ cd coaching-record-tool
 # 在本機電腦（另開一個終端機），把七個真實資料檔案傳上去
 scp coaching.db booking_api_token.txt public_booking_api_token.txt \
     discord_webhook_url.txt scheduler_state.json \
-    admin_password_hash.txt session_secret.txt \
+    admin_password_hash.txt session_secret.txt bank_info.txt \
     coach@<VPS的IP>:~/coaching-record-tool/
+```
+
+`bank_info.txt` 是課程訊息結尾附的匯款資訊（銀行帳號），repo 公開前從程式碼移出來，
+多行純文字，網站登入後才讀得到（`GET /api/settings/bank-info`）。一樣要先建好再啟動容器：
+
+```bash
+cd ~/coaching-record-tool
+nano bank_info.txt   # 貼上匯款資訊（例如「匯款資訊：」「XX銀行（代碼）」「帳號：…」三行），Ctrl+O 存檔、Ctrl+X 離開
+chown 1000:1000 bank_info.txt
 ```
 
 要換密碼時，在 VPS 上執行（不用重開容器，下一次登入就生效，所有裝置
@@ -209,7 +218,7 @@ Desktop 直接開 `https://admin.badmintonlemon.com/api/integrations/venue-sched
 # （容器預設是 1000，可以用這行確認）
 docker compose -f docker-compose.cloud.yml exec coaching-record-tool id appuser
 sudo chown 1000:1000 coaching.db booking_api_token.txt public_booking_api_token.txt \
-    discord_webhook_url.txt scheduler_state.json admin_password_hash.txt session_secret.txt
+    discord_webhook_url.txt scheduler_state.json admin_password_hash.txt session_secret.txt bank_info.txt
 
 # 方法二：改用 root 執行（單人小工具、機器只有你在用，風險可接受的話
 # 這樣最省事）——把 Dockerfile 裡 `RUN useradd --create-home appuser` 跟
