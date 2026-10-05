@@ -181,7 +181,7 @@ erDiagram
         enum payment_status
         float revenue_amount
         float venue_fee_amount
-        bool hour_reminder_sent "上課前一小時提醒是否已發送，防重複通知"
+        bool hour_reminder_sent "（已停用）原本的上課前一小時提醒已發送旗標"
     }
     ADJUSTMENTS {
         int id PK
@@ -200,7 +200,7 @@ erDiagram
 修正）。`available_sessions` 則完全是計算欄位，資料庫裡沒有對應的實體
 欄位。
 
-`hour_reminder_sent`／`ending_reminder_sent` 剛好是相反的設計：這兩個
+`ending_reminder_sent`（以及已停用的 `hour_reminder_sent`）剛好是相反的設計：這類
 **必須**存成欄位、不能即時計算，因為它們的用途就是「記住這件事有沒有
 發生過」（發過的通知不能因為重新整理一次就忘記、又發第二次），跟
 `remaining_sessions` 那種「每次都該用當下狀態重算」的欄位目的不同，不
@@ -282,7 +282,7 @@ erDiagram
 - 學生列表依「是否有進行中套組」排序
 - 數字輸入框防止滑鼠滾輪誤改金額
 - 給外部訂場自動化系統用的資料介接 API（`/api/integrations/venue-schedule`），含獨立的 Bearer Token 驗證機制
-- 背景排程系統：上課前一小時、套組剩 7 天、逾期未收款/未結算三種 Discord 通知
+- 背景排程系統：前一天 18:00 的隔天課程總覽、套組剩 7 天、逾期未收款/未結算三種 Discord 通知（2026-10 起隔天課程總覽取代原本的上課前一小時逐堂提醒）
 - 給公開預約網站（`coaching-booking-site`，獨立專案）核准申請後自動建立正式課程用的介接端點（`POST /api/integrations/lessons`）
 
 ---

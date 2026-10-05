@@ -163,7 +163,8 @@ class Lesson(Base):
     revenue_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     # 場地費：代收代付給場館的費用，不算教練收入，不計入收入統計
     venue_fee_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    # 「上課前一小時」提醒是否已發送過，避免每次排程檢查都重複通知
+    # 已停用：原本「上課前一小時」逐堂提醒的已發送旗標。2026-10 起改成前一天 18:00
+    # 發隔天課程總覽（見 app/scheduler.py），欄位保留不刪，避免動到既有資料表
     hour_reminder_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     student: Mapped["Student"] = relationship(back_populates="lessons")

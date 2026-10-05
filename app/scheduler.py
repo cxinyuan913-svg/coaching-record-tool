@@ -1,12 +1,15 @@
-"""背景提醒排程：上課前一小時提醒、套組即將結束提醒、逾期未收款/未結算提醒。
+"""背景提醒排程：隔天課程總覽、套組即將結束提醒、逾期未收款/未結算提醒。
 
 用一條每分鐘檢查一次的背景執行緒，不引入額外的排程套件（APScheduler 等），
 維持專案「能用簡單方式就不加依賴」的風格。
 
 三項提醒各自的防重複機制不同：
-- 上課提醒／套組結束提醒：各自在 lessons／packages 表上有一個已發送旗標欄位，
-  發過就不會再發（改期或請假順延會產生新的一堂，旗標預設 False，自然會重新
-  提醒，不用額外處理）。
+- 隔天課程總覽：每天台灣時間 18:00 起發一則，列出隔天所有排定的課（沒課也發
+  一則「明天沒有課」，順便當作提醒系統有在運作的訊號）。用狀態檔記錄「今天發
+  過了沒」，同一天只發一次；18:00 剛好伺服器在重開的話，恢復後當晚會補發。
+  （2026-10 教練要求，取代原本的「上課前一小時」逐堂提醒；lessons 表的
+  hour_reminder_sent 欄位保留但不再使用。）
+- 套組結束提醒：在 packages 表上有一個已發送旗標欄位，發過就不會再發。
 - 逾期未收款/未結算提醒：故意「只要還沒收款，每天都會再提醒一次」，用一個
   記錄「今天發過了沒」的日期值判斷，不用旗標——這是設計上的選擇，提醒到你
   去收錢為止，不是提醒一次就算了。這個日期值寫在本機一個小檔案裡（見
@@ -26,6 +29,7 @@ import os
 import threading
 import time
 from datetime import date, datetime, timedelta
+from datetime import time as time_of_day
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -49,49 +53,75 @@ _STATE_FILE = Path(
 )
 
 
-def _load_last_unpaid_reminder_date() -> date | None:
+def _load_state() -> dict:
     if not _STATE_FILE.exists():
-        return None
+        return {}
     try:
-        raw = json.loads(_STATE_FILE.read_text(encoding="utf-8")).get("last_unpaid_reminder_date")
+        data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return None
-    return date.fromisoformat(raw) if raw else None
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
-def _save_last_unpaid_reminder_date(value: date) -> None:
+def _load_state_date(key: str) -> date | None:
+    raw = _load_state().get(key)
     try:
-        _STATE_FILE.write_text(
-            json.dumps({"last_unpaid_reminder_date": value.isoformat()}), encoding="utf-8"
-        )
+        return date.fromisoformat(raw) if raw else None
+    except ValueError:
+        return None
+
+
+def _save_state_date(key: str, value: date) -> None:
+    """只更新自己那一個欄位，其他提醒的紀錄要保留（狀態檔是共用的）。"""
+    state = _load_state()
+    state[key] = value.isoformat()
+    try:
+        _STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
     except OSError:
         pass  # 寫檔失敗頂多今天多發一次通知，不能讓排程整個掛掉
 
 
-def _check_lesson_reminders(db: Session) -> None:
-    """課程開始前 60 分鐘內、還沒發過提醒的排定課程，發一次「一小時後上課」。"""
+def _load_last_unpaid_reminder_date() -> date | None:
+    return _load_state_date("last_unpaid_reminder_date")
+
+
+def _save_last_unpaid_reminder_date(value: date) -> None:
+    _save_state_date("last_unpaid_reminder_date", value)
+
+
+DAILY_DIGEST_TIME = time_of_day(18, 0)
+WEEKDAY_ZH = "一二三四五六日"
+
+
+def _check_daily_lesson_digest(db: Session) -> None:
+    """每天 18:00 起發一次隔天的課程總覽；同一天只發一次，發送失敗下一分鐘會再試。"""
     now = now_taipei()
+    if now.time() < DAILY_DIGEST_TIME:
+        return
     today = now.date()
+    if _load_state_date("last_daily_digest_date") == today:
+        return
+
+    tomorrow = today + timedelta(days=1)
     lessons = (
         db.query(models.Lesson)
-        .filter(
-            models.Lesson.status == LessonStatus.SCHEDULED,
-            models.Lesson.hour_reminder_sent.is_(False),
-            models.Lesson.date.in_([today, today + timedelta(days=1)]),
-        )
+        .filter(models.Lesson.date == tomorrow, models.Lesson.status == LessonStatus.SCHEDULED)
+        .order_by(models.Lesson.start_time)
         .all()
     )
-    for lesson in lessons:
-        start_dt = datetime.combine(lesson.date, lesson.start_time)
-        remaining = start_dt - now
-        if timedelta(0) < remaining <= timedelta(minutes=60):
-            send_discord_notification(
-                f"📌 一小時後上課\n"
-                f"{lesson.student.name} {lesson.date.isoformat()} "
-                f"{lesson.start_time.strftime('%H:%M')}（{lesson.venue.name}）"
-            )
-            lesson.hour_reminder_sent = True
-    db.commit()
+    day = f"{tomorrow.month}/{tomorrow.day}（{WEEKDAY_ZH[tomorrow.weekday()]}）"
+    if lessons:
+        lines = [f"📅 明天 {day}共 {len(lessons)} 堂課"]
+        for lesson in lessons:
+            start = datetime.combine(lesson.date, lesson.start_time)
+            end = start + timedelta(minutes=lesson.duration)
+            lines.append(f"・{start:%H:%M}～{end:%H:%M} {lesson.student.name}｜{lesson.venue.name}")
+        message = "\n".join(lines)
+    else:
+        message = f"📅 明天 {day}沒有課"
+
+    if send_discord_notification(message):
+        _save_state_date("last_daily_digest_date", today)
 
 
 def _check_package_ending_reminders(db: Session) -> None:
@@ -202,7 +232,7 @@ def _run_loop() -> None:
     while True:
         try:
             with SessionLocal() as db:
-                _check_lesson_reminders(db)
+                _check_daily_lesson_digest(db)
                 _check_package_ending_reminders(db)
                 _check_unpaid_reminders(db)
         except Exception as exc:  # 背景排程不能讓伺服器掛掉，印出來方便除錯
