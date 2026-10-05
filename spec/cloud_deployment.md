@@ -257,6 +257,56 @@ scp -r coach@<VPS的IP>:~/coaching-record-tool/backups ./coaching-record-tool-ba
 
 ---
 
+## 異地備份（Cloudflare R2）
+
+2026-10 加入。上面的每日備份跟 Vultr 快照都在同一家公司，帳號或主機出事會一起不見，
+所以每天再自動上傳一份到 Cloudflare R2（S3 相容的物件儲存，免費額度 10GB，資料庫
+才幾十 KB，用不完）。腳本是 `scripts/offsite_backup.sh`，R2 上保留 30 天，上傳失敗
+會發 Discord 通知。
+
+**一、在 Cloudflare 開 R2（自己操作）**
+1. Cloudflare 後台左側 **R2 Object Storage** → 開通（會要求綁付款方式，免費額度內不收費）。
+2. **Create bucket**，名稱 `coaching-backup`，其他預設。
+3. **Manage R2 API Tokens → Create API token**：權限選 **Object Read & Write**，
+   範圍只選 `coaching-backup` 這個 bucket。建立後記下 **Access Key ID**、
+   **Secret Access Key** 與 **S3 endpoint**（`https://<帳號ID>.r2.cloudflarestorage.com`）。
+   這三個只會顯示一次，**不要貼到任何對話或 repo 裡**。
+
+**二、在主機上設定 rclone**
+```bash
+curl https://rclone.org/install.sh | bash
+mkdir -p /root/.config/rclone
+nano /root/.config/rclone/rclone.conf
+```
+貼上（三個值換成剛剛記下的）：
+```
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = <Access Key ID>
+secret_access_key = <Secret Access Key>
+endpoint = <S3 endpoint>
+acl = private
+```
+```bash
+chmod 600 /root/.config/rclone/rclone.conf
+rclone lsd r2:                       # 看得到 coaching-backup 就代表金鑰正確
+cd ~/coaching-record-tool && sh scripts/offsite_backup.sh && rclone ls r2:coaching-backup/db
+(crontab -l; echo "20 19 * * * sh /root/coaching-record-tool/scripts/offsite_backup.sh") | crontab -
+crontab -l
+```
+排在每日備份（UTC 19:00）之後 20 分鐘，也就是台灣時間 03:20。
+
+**三、需要還原時**
+```bash
+rclone ls r2:coaching-backup/db                          # 列出所有備份
+rclone copy r2:coaching-backup/db/coaching_YYYYMMDD_HHMMSS.db ./restore/
+```
+拿到備份檔後，照下面「回退到本機」或直接覆蓋主機上的 `coaching.db`（先停容器、先備份現有檔案）。
+主機整台不見的話，任何一台電腦裝 rclone、用同一組 R2 金鑰設定好就能下載。
+
+---
+
 ## 回退到本機（雲端版本出問題、想先切回本機用的時候）
 
 這次雲端化完全沒有動到本機現有的東西——本機的 `coaching.db`、
