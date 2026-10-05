@@ -1,0 +1,15 @@
+# 統一 repo 裡的換行格式：一律存成 LF，在 Windows 取出時由 Git 自動轉換
+* text=auto eol=lf
+
+# 主機（Linux）上直接執行的腳本一定要是 LF，不然 sh 會讀到多餘的 
+*.sh text eol=lf
+
+# Windows 專用的啟動腳本維持 Windows 換行
+*.bat text eol=crlf
+*.vbs text eol=crlf
+
+# 二進位檔不轉換
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary

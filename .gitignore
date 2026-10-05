@@ -19,3 +19,8 @@ scheduler_state.json
 server.log
 backups/
 
+
+# 個人面試準備與讀程式碼筆記，只放本機、不公開
+INTERVIEW_QA.md
+READING_MAP.md
+CODE_WALKTHROUGH.md
