@@ -18,7 +18,24 @@
 
 ## 目前階段
 
-階段一：能記帳的最小版本（單堂制課程 + 行事曆 + 收款狀態）
+六個開發階段皆已完成（階段六的 SQLite → Postgres 遷移未執行，仍用 SQLite，
+單人使用無虞）。系統已部署在雲端 VPS 正式使用中：
+https://admin.badmintonlemon.com
+
+現況完整盤點見 `STATUS.md`（以實際程式碼為準，非規劃文件）。
+
+### 進行中
+- 無特定主線，以維運與實際使用回饋驅動的小幅調整為主
+
+### 規劃中（尚未動工）
+- 公開教練網站與 LINE 官方帳號整合：缺口分析見 `STATUS.md` 第 10 節
+- `spec/venue-optimization.md`：場館優化建議，只有規格、無程式碼
+- `spec/multi_user_architecture.md`：多人架構，純規劃
+
+### 已放棄
+- LLM 約課訊息解析（`app/booking_parser/` 的 llm_client、matcher、resolver、
+  service、prompts）：實測判斷不穩定，改為教練自選條件。程式碼保留但無人
+  呼叫，`POST /api/booking-requests/parse` 已無前端。
 
 ## 開發慣例
 
