@@ -17,7 +17,7 @@ Docker 讓服務更穩」，解決的是「伺服器有沒有開著」的問題�
 
 | 項目 | 實際情況 |
 |---|---|
-| 網址 | https://admin.badmintonlemon.com（主網域 badmintonlemon.com 保留給之後對學生的網站） |
+| 網址 | https://admin.badmintonlemon.com；主網域 https://badmintonlemon.com 是對學生的預約網站（coaching-booking-site），也由這裡的 Caddy 轉發，見下方「同一台主機上的預約網站」 |
 | 網域 | Cloudflare Registrar；DNS `A admin → VPS IP`，Proxy 關閉（灰色雲朵） |
 | 主機 | Vultr，Shared CPU 1 GB，Tokyo，已開 Auto Backups |
 | 系統 | Ubuntu 26.04 LTS（Vultr 給的版本，比原本規劃的 24.04 新，不影響） |
@@ -29,6 +29,21 @@ Docker 讓服務更穩」，解決的是「伺服器有沒有開著」的問題�
 跟下面原始步驟的差異：沒有另外建 `coach` 帳號，直接用 root，但關掉密碼登入、
 只允許金鑰（單人工具，省掉權限麻煩，安全性差別不大），所以下面寫
 `/home/coach/...` 的路徑實際是 `/root/...`。
+
+## 同一台主機上的預約網站（coaching-booking-site）
+
+主網域 badmintonlemon.com 是另一個專案 coaching-booking-site（對學生開放註冊的
+預約網站），獨立容器、獨立資料庫，部署步驟寫在那個 repo 的
+`spec/cloud_deployment.md`。跟這裡的關係只有兩點：
+
+- **共用這個 Caddy**：主機只能有一個程式佔 80/443，所以 `Caddyfile` 多一段
+  `badmintonlemon.com → coaching-booking-site:8000`。
+- **共用 Docker 網路 `badmintonlemon_web`**：Caddy 同時接在這個 compose 的預設
+  網路跟 `badmintonlemon_web` 上，才連得到另一個 compose 的容器。這個網路要先
+  `docker network create badmintonlemon_web` 建好，**否則 Caddy 起不來、admin
+  網站也會一起掛掉**。
+
+預約網站的容器沒開或掛掉時，只有 badmintonlemon.com 回 502，admin 不受影響。
 
 ## 之後要更新網站（改功能、修 bug）
 

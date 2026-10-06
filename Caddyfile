@@ -4,3 +4,10 @@
 {$DOMAIN} {
 	reverse_proxy coaching-record-tool:8000
 }
+
+# 對學生的預約網站（coaching-booking-site：另一個 repo、另一個容器、另一個
+# 資料庫）。這台主機只能有一個 Caddy 佔 80/443，所以主網域也由這裡轉發；
+# 那個容器接在共用網路 badmintonlemon_web 上（見 docker-compose.cloud.yml）。
+{$PUBLIC_DOMAIN:badmintonlemon.com} {
+	reverse_proxy coaching-booking-site:8000
+}

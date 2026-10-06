@@ -34,6 +34,17 @@ services:
       - caddy_config:/config
     depends_on:
       - coaching-record-tool
+    networks:
+      - default # 連 coaching-record-tool
+      - web # 連 coaching-booking-site（badmintonlemon.com）
+
+# 跟 coaching-booking-site 共用的網路，要先在主機上建立一次：
+#   docker network create badmintonlemon_web
+# 沒建立的話 Caddy 起不來，連 admin 網站都會一起掛掉。
+networks:
+  web:
+    name: badmintonlemon_web
+    external: true
 
 volumes:
   caddy_data:
