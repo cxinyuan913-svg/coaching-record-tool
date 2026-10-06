@@ -31,6 +31,7 @@
           <th>地址</th>
           <th>開放訂場規則</th>
           <th>取消／改期規定</th>
+          <th>場地費</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -75,6 +76,31 @@
           <button type="submit">儲存</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 場地費價目表：公開預約網站依場館、星期、時段計算場地費用 -->
+  <div class="modal-backdrop" id="fee-modal">
+    <div class="modal" style="max-width: 720px; width: 95vw">
+      <h2 id="fee-modal-title">場地費價目表</h2>
+      <p style="color: #666; font-size: 13px; margin-top: 0">
+        每小時場地費，依星期與時段設定。一堂課跨兩個時段時按分鐘比例計算；
+        沒設定到的時段，公開預約網站就無法報價。同一個星期的時段不能重疊。
+      </p>
+      <table>
+        <thead>
+          <tr><th>適用星期</th><th>開始</th><th>結束</th><th>每小時</th><th></th></tr>
+        </thead>
+        <tbody id="fee-rows"></tbody>
+      </table>
+      <div style="margin-top: 8px">
+        <button type="button" class="secondary" id="btn-fee-add">新增一列</button>
+      </div>
+      <p id="fee-error" style="color: #c0392b; font-size: 13px; display: none"></p>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="btn-fee-cancel">取消</button>
+        <button type="button" id="btn-fee-save">儲存</button>
+      </div>
     </div>
   </div>
 
