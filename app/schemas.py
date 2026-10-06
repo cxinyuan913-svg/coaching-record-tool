@@ -1,7 +1,7 @@
 """Pydantic schemas：API 輸入輸出格式。"""
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import AdjustmentType, BookingStatus, LessonStatus, PackageStatus, PaymentStatus, Tier
 
@@ -37,6 +37,28 @@ class VenueTravelTimeItem(BaseModel):
     venue_a_id: int
     venue_b_id: int
     travel_minutes: int | None = Field(None, ge=0, le=300)
+
+
+class VenueFeeRateItem(BaseModel):
+    """一筆場地費價目：適用星期（週一=0 … 週日=6，可複選）、時段、每小時價。"""
+
+    weekdays: list[int] = Field(min_length=1)
+    start_time: time
+    end_time: time
+    fee_per_hour: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def check(self):
+        if any(d < 0 or d > 6 for d in self.weekdays):
+            raise ValueError("星期只能是 0（週一）到 6（週日）")
+        if self.start_time >= self.end_time:
+            raise ValueError("開始時間要早於結束時間")
+        self.weekdays = sorted(set(self.weekdays))
+        return self
+
+
+class VenueFeeRateOut(VenueFeeRateItem):
+    id: int
 
 
 class PriceRuleBase(BaseModel):

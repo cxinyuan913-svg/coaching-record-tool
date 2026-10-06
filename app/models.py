@@ -264,3 +264,26 @@ class VenueTravelTime(Base):
     venue_a_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), nullable=False)
     venue_b_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), nullable=False)
     travel_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class VenueFeeRate(Base):
+    """場館 × 時段的場地費價目表（每小時價），給公開預約網站計算場地費用
+    （見 coaching-booking-site 的 spec/booking_flow.md）。同一個場館可以有多筆：
+    例如平日白天、平日晚上、假日各一個價。
+
+    weekdays 存逗號分隔的星期（週一=0 … 週日=6），例如 "0,1,2,3,4"。同一個
+    場館同一個星期的時段不能重疊（存檔時檢查），計價時才不會有兩個價格。
+    """
+
+    __tablename__ = "venue_fee_rates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    venue_id: Mapped[int] = mapped_column(ForeignKey("venues.id"), nullable=False, index=True)
+    weekdays: Mapped[str] = mapped_column(String(20), nullable=False)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    fee_per_hour: Mapped[float] = mapped_column(Float, nullable=False)
+
+    @property
+    def weekday_list(self) -> list[int]:
+        return [int(d) for d in self.weekdays.split(",") if d != ""]
