@@ -344,7 +344,11 @@ class VenueScheduleOut(BaseModel):
 
 
 class PublicBookingLessonCreate(BaseModel):
-    """給公開預約網站核准申請後呼叫，用來自動建立一堂正式課程。"""
+    """給公開預約網站核准申請後呼叫，用來自動建立一堂正式課程。
+
+    coach_fee／venue_fee 有給就直接用（預約網站已經跟學生報過價，金額要一致）；
+    沒給時教練費照舊依價目表推算、場地費為 0。source_booking_id 是預約網站那邊
+    的申請編號，有給的課之後才能用取消／標記已付款端點。"""
 
     venue_name: str
     student_name: str
@@ -353,6 +357,9 @@ class PublicBookingLessonCreate(BaseModel):
     start_time: time
     duration: int
     note: str | None = None
+    coach_fee: float | None = Field(None, ge=0)
+    venue_fee: float | None = Field(None, ge=0)
+    source_booking_id: int | None = None
 
 
 class PublicBookingLessonOut(BaseModel):
@@ -360,3 +367,63 @@ class PublicBookingLessonOut(BaseModel):
     student_id: int
     student_created: bool
     revenue_amount: float
+    venue_fee_amount: float = 0
+
+
+class PublicVenueOut(BaseModel):
+    name: str
+    areas: list[str]
+
+
+class AvailabilityDay(BaseModel):
+    """某一天、某個時段範圍、哪些場館（同一天可以有多筆，例如上午新竹、晚上台北）。"""
+
+    date: date
+    time_from: time
+    time_to: time
+    venue_names: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.time_from >= self.time_to:
+            raise ValueError("time_from 要早於 time_to")
+        return self
+
+
+class AvailabilityRequest(BaseModel):
+    duration_minutes: int = Field(60, ge=30, le=240)
+    days: list[AvailabilityDay] = Field(min_length=1, max_length=100)
+
+
+class AvailabilitySlotOut(BaseModel):
+    date: date
+    start_time: time
+    end_time: time
+    venue_name: str
+    adjacent: bool  # 緊接在同館既有課程前後（交通最省，網站上標「推薦」）
+
+
+class AvailabilityOut(BaseModel):
+    slots: list[AvailabilitySlotOut]
+
+
+class VenueFeeQuoteRequest(BaseModel):
+    venue_name: str
+    date: date
+    start_time: time
+    duration: int = Field(ge=15, le=480)
+
+
+class VenueFeeQuoteOut(BaseModel):
+    venue_fee: float
+
+
+class PublicLessonMarkPaid(BaseModel):
+    payment_date: date
+
+
+class PublicLessonStatusOut(BaseModel):
+    lesson_id: int
+    status: LessonStatus
+    payment_status: PaymentStatus
+    payment_date: date | None

@@ -21,7 +21,7 @@
 
 | Token | 可用端點 | 權限 |
 |---|---|---|
-| `public_booking_api_token` | `POST /api/integrations/lessons` | 建立課程（寫入） |
+| `public_booking_api_token` | `POST /api/integrations/lessons`、端點三～七 | 建立／取消預約網站的課程、標記已付款（寫入）；場館清單、可約時段、場地費試算（唯讀） |
 | `booking_api_token` | `GET /api/integrations/venue-schedule` | 查課表（唯讀） |
 
 錯誤回應一律為 `{"detail": "錯誤訊息"}`。
@@ -49,6 +49,9 @@ Content-Type: application/json
 | `start_time` | `HH:MM:SS` | ✅ | 開始時間 |
 | `duration` | int | ✅ | 時長（**分鐘**） |
 | `note` | string \| null | ❌ | ⚠️ **會被接受但直接丟棄，不會存進資料庫**（見「已知限制」） |
+| `coach_fee` | float \| null | ❌ | 教練費。**有給就直接當作課程收入**，不再依價目表推算（2026-10 新增） |
+| `venue_fee` | float \| null | ❌ | 場地費（代收代付，不算收入）。沒給為 0（2026-10 新增） |
+| `source_booking_id` | int \| null | ❌ | 預約網站自己的申請編號。**有給的課才能用端點六、七取消／標記已付款**（2026-10 新增） |
 
 #### 合法的 `venue_name`
 
@@ -83,13 +86,14 @@ Content-Type: application/json
 | `lesson_id` | int | 新建課程的 id |
 | `student_id` | int | 對應到的學生 id |
 | `student_created` | bool | `true` ＝ 這次新建了學生；`false` ＝ 比對到既有學生 |
-| `revenue_amount` | float | 系統依價目表算出的金額（見下方計價規則） |
+| `revenue_amount` | float | 課程收入：有給 `coach_fee` 就是它，否則依價目表推算（見下方計價規則） |
+| `venue_fee_amount` | float | 場地費：有給 `venue_fee` 就是它，否則 0 |
 
 ```json
 { "lesson_id": 412, "student_id": 37, "student_created": true, "revenue_amount": 1600.0 }
 ```
 
-建立出來的課程固定為：`status = scheduled`、`payment_status = unpaid`、`headcount = 1`、`venue_fee_amount = 0`。
+建立出來的課程固定為：`status = scheduled`、`payment_status = unpaid`、`headcount = 1`。
 
 ### 錯誤
 
@@ -168,6 +172,73 @@ Authorization: Bearer <booking_api_token>
 
 ---
 
+## 端點三～七：公開預約網站 v2（2026-10 新增）
+
+全部用 `public_booking_api_token`，不需要網頁登入，回應**不含任何學生資料**。
+對應預約網站的流程規格見 coaching-booking-site 的 `spec/booking_flow.md`。
+
+### 端點三：場館清單
+
+```
+GET /api/integrations/public/venues
+→ [{"name": "快羽會館", "areas": ["台北"]}, {"name": "晴天羽球館", "areas": ["新竹"]}]
+```
+
+名稱就是建立課程時 `venue_name` 要用的值，照抄不會對不上。`areas` 來自找空檔的地區表，沒設定時是空陣列。
+
+### 端點四：可約時段
+
+```
+POST /api/integrations/availability
+{
+  "duration_minutes": 60,
+  "days": [
+    {"date": "2026-10-17", "time_from": "09:00", "time_to": "18:00", "venue_names": ["快羽會館", "森域羽球運動會館"]}
+  ]
+}
+→ {"slots": [
+     {"date": "2026-10-17", "start_time": "09:00:00", "end_time": "10:00:00", "venue_name": "快羽會館", "adjacent": false},
+     {"date": "2026-10-17", "start_time": "11:30:00", "end_time": "12:30:00", "venue_name": "快羽會館", "adjacent": true}
+   ]}
+```
+
+- 判斷跟教練後台「找空檔」同一套：不跟任何場館的既有課程重疊、前後課程的車程來得及（查不到車程視為趕不到）、在工作時段 08:00–22:30 內、晚於現在。
+- 開始時間有兩種：時段內的**整點**，以及**緊接同館既有課程**前後的時間（可能不是整點，例如 11:30），後者 `adjacent = true`，建議標「推薦」。
+- `time_from`／`time_to` 限制的是**開始時間**；結束時間由工作時段把關。
+- 同一天可以送多筆（例如上午新竹、晚上台北）；`days` 最多 100 筆，`duration_minutes` 30–240。
+- 場館名稱不存在回 400。
+
+### 端點五：場地費試算
+
+```
+POST /api/integrations/venue-fee-quote
+{"venue_name": "快羽會館", "date": "2026-10-17", "start_time": "10:00", "duration": 90}
+→ {"venue_fee": 750}
+```
+
+依教練在「場地管理 → 場地費」設定的場館 × 星期 × 時段每小時價計算，跨兩個價格時段按分鐘比例。**價目表沒涵蓋到的時段回 400**（不猜預設值）。
+
+### 端點六：取消課程
+
+```
+POST /api/integrations/lessons/{lesson_id}/cancel
+→ {"lesson_id": 412, "status": "cancelled", "payment_status": "unpaid", "payment_date": null}
+```
+
+把課改成已取消（時段隨即釋放）。重複呼叫不會出錯；已上完（completed）的課回 409；建立時沒帶 `source_booking_id` 的課（教練自己排的）回 403。
+
+### 端點七：標記已付款
+
+```
+POST /api/integrations/lessons/{lesson_id}/mark-paid
+{"payment_date": "2026-10-08"}
+→ {"lesson_id": 412, "status": "scheduled", "payment_status": "paid", "payment_date": "2026-10-08"}
+```
+
+限制同端點六。
+
+---
+
 ## 已知限制（請務必先看）
 
 ### 1. ✅ 衝突檢查（2026-10 已修正為時段重疊判斷）
@@ -192,7 +263,7 @@ Authorization: Bearer <booking_api_token>
 
 - 申請、審核、拒絕的完整流程必須**由預約網站自己實作**。
 - 只有在教練核准之後，才呼叫這個端點。
-- 一旦呼叫成功，課程就真的進教練行事曆了，**沒有「取消剛剛建立的課」的 API**（尚未提供），需請教練手動在後台刪除。
+- 一旦呼叫成功，課程就真的進教練行事曆了。要撤回（逾期未付款、學生取消）請用**端點六**改成已取消；只有建立時帶了 `source_booking_id` 的課才能這樣做。
 
 ### 3. 🔴 學生比對規則很嚴格，容易產生重複學生
 
@@ -216,10 +287,10 @@ schema 接受 `note`，但處理邏輯沒有使用它，**不會存進資料庫*
 
 ### 7. 其他尚未提供的介面
 
-- 不含個資的「可預約時段」公開端點
-- 查詢／修改／刪除已建立課程的端點
-- 取得場館清單的端點（場館名稱目前只能寫死或向教練索取）
+- 查詢／修改已建立課程的端點（取消、標記已付款已提供，見端點六、七）
 - 訂場結果回寫端點
+
+（不含個資的可約時段、場館清單已於 2026-10 提供，見端點三、四。）
 
 ---
 

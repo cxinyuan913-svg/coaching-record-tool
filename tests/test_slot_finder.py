@@ -3,12 +3,13 @@
 場館設定：A=1、B=2 之間車程 20 分鐘；C=3 跟誰都沒設定車程（不可銜接）。
 日期統一用 2026-10-06（週二），「現在」是 2026-10-01。
 """
-from datetime import datetime
+from datetime import date, datetime, time
 
 from app.booking_parser.slot_finder import (
     BusySlot,
     TimeWindow,
     _merge_overlapping,
+    find_bookable_slots,
     find_slots,
     make_travel_lookup,
 )
@@ -184,3 +185,68 @@ def test_open_block_lists_days_other_lessons_for_coach():
     lesson = busy(B, at(8), at(9))
     r = run([lesson], {A})
     assert all(b.other_busy == [lesson] for b in r.open_blocks)
+
+
+# ---------- 公開預約網站：find_bookable_slots ----------
+
+
+def _bookable(busy, start, end, venue_ids, travel_pairs=None, now=None, duration=60):
+    day = date(2026, 10, 17)
+    return find_bookable_slots(
+        busy=busy,
+        window=TimeWindow(start=datetime.combine(day, start), end=datetime.combine(day, end)),
+        venue_ids=venue_ids,
+        duration_minutes=duration,
+        travel=make_travel_lookup(travel_pairs or {}),
+        now=now or datetime(2026, 10, 1, 9, 0),
+    )
+
+
+def _busy(lesson_id, venue_id, start, end):
+    day = date(2026, 10, 17)
+    return BusySlot(
+        lesson_id=lesson_id,
+        venue_id=venue_id,
+        start=datetime.combine(day, start),
+        end=datetime.combine(day, end),
+    )
+
+
+def test_可預約時段_沒有課時列出時段內每個整點():
+    slots = _bookable([], time(9, 0), time(12, 0), [1])
+    assert [(s.start.time(), s.adjacent) for s in slots] == [
+        (time(9, 0), False),
+        (time(10, 0), False),
+        (time(11, 0), False),
+    ]
+
+
+def test_可預約時段_同館接課標推薦且包含非整點的接課時間():
+    busy = [_busy(1, 1, time(10, 30), time(11, 30))]
+    slots = _bookable(busy, time(9, 0), time(13, 0), [1])
+    got = [(s.start.time(), s.adjacent) for s in slots]
+    # 10:00、11:00 跟 10:30 那堂重疊不行；09:30 接在前面、11:30 接在後面是推薦
+    assert got == [
+        (time(9, 0), False),
+        (time(9, 30), True),
+        (time(11, 30), True),
+        (time(12, 0), False),
+    ]
+
+
+def test_可預約時段_別館的課要算車程():
+    # 別館 10:00-11:00 有課，車程 40 分鐘：本館最早 11:40 才到得了，整點只剩 12:00
+    busy = [_busy(1, 2, time(10, 0), time(11, 0))]
+    slots = _bookable(busy, time(9, 0), time(13, 0), [1], travel_pairs={(1, 2): 40})
+    assert [s.start.time() for s in slots] == [time(12, 0)]
+
+
+def test_可預約時段_查不到車程的別館課程視為趕不到():
+    busy = [_busy(1, 2, time(14, 0), time(15, 0))]
+    slots = _bookable(busy, time(9, 0), time(13, 0), [1])
+    assert slots == []
+
+
+def test_可預約時段_多個場館依傳入順序排列且已過去的時間不列():
+    slots = _bookable([], time(9, 0), time(11, 0), [3, 1], now=datetime(2026, 10, 17, 9, 30))
+    assert [(s.start.time(), s.venue_id) for s in slots] == [(time(10, 0), 3), (time(10, 0), 1)]

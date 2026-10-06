@@ -17,8 +17,11 @@ from app import models, schemas
 from app.auth import verify_booking_token_or_login, verify_public_booking_token
 from app.database import get_db
 from app.package_logic import describe_lesson_time, find_overlapping_lesson
+from app.booking_parser.slot_finder import TimeWindow, find_bookable_slots
+from app.booking_parser.slot_search import _load_busy, _load_travel
 from app.models import LessonStatus, PaymentStatus, Tier
-from app.pricing import resolve_price
+from app.pricing import VenueFeeNotSet, compute_venue_fee, resolve_price
+from app.routers.slot_search import get_now
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
@@ -126,7 +129,13 @@ def create_lesson_from_public_booking(
         db.add(student)
         db.flush()  # 取得 student.id 供下面建立 Lesson 用
 
-    revenue_amount = resolve_price(db, student.tier, headcount=1, duration_minutes=payload.duration)
+    # 預約網站已經跟學生報過價時直接用它的金額，學生看到的、付的、教練記帳的
+    # 才會是同一個數字；沒給才照舊依價目表推算
+    if payload.coach_fee is not None:
+        revenue_amount = payload.coach_fee
+    else:
+        revenue_amount = resolve_price(db, student.tier, headcount=1, duration_minutes=payload.duration)
+    venue_fee_amount = payload.venue_fee if payload.venue_fee is not None else 0
 
     lesson = models.Lesson(
         student_id=student.id,
@@ -138,7 +147,8 @@ def create_lesson_from_public_booking(
         status=LessonStatus.SCHEDULED,
         payment_status=PaymentStatus.UNPAID,
         revenue_amount=revenue_amount,
-        venue_fee_amount=0,
+        venue_fee_amount=venue_fee_amount,
+        source_booking_id=payload.source_booking_id,
     )
     db.add(lesson)
     db.commit()
@@ -149,4 +159,148 @@ def create_lesson_from_public_booking(
         student_id=student.id,
         student_created=student_created,
         revenue_amount=revenue_amount,
+        venue_fee_amount=venue_fee_amount,
     )
+
+
+# ---------- 公開預約網站：場館、可約時段、場地費、課程後續處理 ----------
+# 以下都用 public_booking_api_token，回應只含必要資訊，不帶任何學生資料。
+
+
+def _venues_by_name(db: Session, names: list[str]) -> dict[str, models.Venue]:
+    rows = {v.name: v for v in db.query(models.Venue).filter(models.Venue.name.in_(names))}
+    missing = [n for n in names if n not in rows]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"找不到場館「{'、'.join(missing)}」")
+    return rows
+
+
+@router.get(
+    "/public/venues",
+    response_model=list[schemas.PublicVenueOut],
+    dependencies=[Depends(verify_public_booking_token)],
+)
+def public_venues(db: Session = Depends(get_db)):
+    """場館名稱與所屬地區，給預約網站後台設定「每週可教時間」時選場館用，
+    名稱直接從這裡來，建立課程時才不會因為差一個空格對不上。"""
+    areas: dict[int, list[str]] = {}
+    for row in db.query(models.VenueArea).order_by(models.VenueArea.area):
+        areas.setdefault(row.venue_id, []).append(row.area)
+    return [
+        schemas.PublicVenueOut(name=v.name, areas=areas.get(v.id, []))
+        for v in db.query(models.Venue).order_by(models.Venue.id)
+    ]
+
+
+@router.post(
+    "/availability",
+    response_model=schemas.AvailabilityOut,
+    dependencies=[Depends(verify_public_booking_token)],
+)
+def availability(
+    payload: schemas.AvailabilityRequest,
+    db: Session = Depends(get_db),
+    now: datetime = Depends(get_now),
+):
+    """預約網站把「每週可教時間」換算成的每天時段送過來，這裡用找空檔同一套
+    判斷（不撞課、算車程、工作時段內、晚於現在）回傳每個場館可以開始上課的
+    時間；只回時間跟場館，不透露既有課程是誰的。"""
+    names = sorted({n for d in payload.days for n in d.venue_names})
+    venues = _venues_by_name(db, names)
+    busy = _load_busy(db, sorted({d.date for d in payload.days}))
+    travel = _load_travel(db)
+    id_to_name = {v.id: v.name for v in venues.values()}
+
+    found: dict[tuple, schemas.AvailabilitySlotOut] = {}
+    for day in payload.days:
+        window = TimeWindow(
+            start=datetime.combine(day.date, day.time_from), end=datetime.combine(day.date, day.time_to)
+        )
+        for slot in find_bookable_slots(
+            busy=busy,
+            window=window,
+            venue_ids=[venues[n].id for n in day.venue_names],
+            duration_minutes=payload.duration_minutes,
+            travel=travel,
+            now=now,
+        ):
+            key = (slot.start, slot.venue_id)
+            found.setdefault(
+                key,
+                schemas.AvailabilitySlotOut(
+                    date=slot.start.date(),
+                    start_time=slot.start.time(),
+                    end_time=slot.end.time(),
+                    venue_name=id_to_name[slot.venue_id],
+                    adjacent=slot.adjacent,
+                ),
+            )
+    return schemas.AvailabilityOut(slots=[found[k] for k in sorted(found)])
+
+
+@router.post(
+    "/venue-fee-quote",
+    response_model=schemas.VenueFeeQuoteOut,
+    dependencies=[Depends(verify_public_booking_token)],
+)
+def venue_fee_quote(payload: schemas.VenueFeeQuoteRequest, db: Session = Depends(get_db)):
+    """依場地管理裡的「場館 × 時段價目表」試算場地費。價目表沒涵蓋到這個時段
+    時回 400（不猜預設值），預約網站應該請學生改時段或聯絡教練。"""
+    venue = _venues_by_name(db, [payload.venue_name])[payload.venue_name]
+    try:
+        fee = compute_venue_fee(db, venue.id, payload.date, payload.start_time, payload.duration)
+    except VenueFeeNotSet as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return schemas.VenueFeeQuoteOut(venue_fee=fee)
+
+
+def _public_booking_lesson(db: Session, lesson_id: int) -> models.Lesson:
+    lesson = db.get(models.Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="課程不存在")
+    if lesson.source_booking_id is None:
+        raise HTTPException(status_code=403, detail="這堂課不是由預約網站建立的，不能從預約網站修改")
+    return lesson
+
+
+def _status_out(lesson: models.Lesson) -> schemas.PublicLessonStatusOut:
+    return schemas.PublicLessonStatusOut(
+        lesson_id=lesson.id,
+        status=lesson.status,
+        payment_status=lesson.payment_status,
+        payment_date=lesson.payment_date,
+    )
+
+
+@router.post(
+    "/lessons/{lesson_id}/cancel",
+    response_model=schemas.PublicLessonStatusOut,
+    dependencies=[Depends(verify_public_booking_token)],
+)
+def cancel_public_lesson(lesson_id: int, db: Session = Depends(get_db)):
+    """預約網站那邊逾期未付款、未收到款項、學生取消時呼叫，把課改成「已取消」
+    （找空檔與衝突檢查都把已取消視為時段釋放）。重複呼叫不會出錯。"""
+    lesson = _public_booking_lesson(db, lesson_id)
+    if lesson.status == LessonStatus.COMPLETED:
+        raise HTTPException(status_code=409, detail="這堂課已經上完，不能取消")
+    lesson.status = LessonStatus.CANCELLED
+    db.commit()
+    db.refresh(lesson)
+    return _status_out(lesson)
+
+
+@router.post(
+    "/lessons/{lesson_id}/mark-paid",
+    response_model=schemas.PublicLessonStatusOut,
+    dependencies=[Depends(verify_public_booking_token)],
+)
+def mark_public_lesson_paid(
+    lesson_id: int, payload: schemas.PublicLessonMarkPaid, db: Session = Depends(get_db)
+):
+    """教練在預約網站「確認收款」時呼叫，教練不用再到這裡標一次已付款。"""
+    lesson = _public_booking_lesson(db, lesson_id)
+    lesson.payment_status = PaymentStatus.PAID
+    lesson.payment_date = payload.payment_date
+    db.commit()
+    db.refresh(lesson)
+    return _status_out(lesson)

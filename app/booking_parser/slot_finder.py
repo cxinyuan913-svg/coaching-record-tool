@@ -249,3 +249,60 @@ def find_slots(
             )
 
     return SlotSearchResult(anchored=anchored, open_blocks=open_blocks)
+
+
+class BookableSlot(BaseModel):
+    """公開預約網站可以讓學生選的一個具體時段（見 find_bookable_slots）。"""
+
+    start: datetime
+    end: datetime
+    venue_id: int
+    adjacent: bool  # 緊接在同館既有課程前後（交通最省，網站上標「推薦」）
+
+
+def find_bookable_slots(
+    *,
+    busy: list[BusySlot],
+    window: TimeWindow,
+    venue_ids: list[int],
+    duration_minutes: int,
+    travel: TravelLookup,
+    now: datetime,
+) -> list[BookableSlot]:
+    """公開預約網站用：教練設定的可教時段（window）內，每個場館所有「趕得到」
+    的開始時間。判斷跟找空檔完全同一套（_is_candidate：不撞課、前後趕得到、
+    算車程、工作時段內、晚於現在）。
+
+    候選開始時間有兩種：
+    - 整點（教練要求時段好讀）
+    - 同館接課：緊接在既有課程後面（該堂下課時間）或前面（該堂上課時間往前
+      推一堂），這種時段交通最省，標 adjacent=True
+    兩種重複時只留一筆。busy 要包含當天「所有場館」的占用課程。
+    """
+    duration = timedelta(minutes=duration_minutes)
+    day = window.start.date()
+    windows = [window]
+    day_busy = [b for b in busy if b.start.date() == day]
+
+    found: dict[tuple[datetime, int], BookableSlot] = {}
+    for venue_id in venue_ids:
+        here = [b for b in day_busy if b.venue_id == venue_id]
+        starts = set()
+        s = window.start.replace(minute=0, second=0, microsecond=0)
+        if s < window.start:
+            s += OPEN_BLOCK_STEP
+        while s < window.end:
+            starts.add(s)
+            s += OPEN_BLOCK_STEP
+        for b in here:
+            starts.add(b.end)
+            starts.add(b.start - duration)
+
+        for start in starts:
+            end = start + duration
+            if not _is_candidate(start, end, venue_id, windows, day_busy, travel, now):
+                continue
+            adjacent = any(b.end == start or b.start == end for b in here)
+            found[(start, venue_id)] = BookableSlot(start=start, end=end, venue_id=venue_id, adjacent=adjacent)
+
+    return sorted(found.values(), key=lambda x: (x.start, venue_ids.index(x.venue_id)))

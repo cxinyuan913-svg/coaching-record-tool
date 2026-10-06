@@ -38,3 +38,4 @@ def ensure_schema_migrations() -> None:
     with engine.begin() as conn:
         _add_column_if_missing(conn, "lessons", "hour_reminder_sent", "BOOLEAN DEFAULT 0")
         _add_column_if_missing(conn, "packages", "ending_reminder_sent", "BOOLEAN DEFAULT 0")
+        _add_column_if_missing(conn, "lessons", "source_booking_id", "INTEGER")

@@ -166,6 +166,9 @@ class Lesson(Base):
     # 已停用：原本「上課前一小時」逐堂提醒的已發送旗標。2026-10 起改成前一天 18:00
     # 發隔天課程總覽（見 app/scheduler.py），欄位保留不刪，避免動到既有資料表
     hour_reminder_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 由公開預約網站核准申請後建立的課程，記下對方的申請編號；只有這種課才允許
+    # 預約網站透過整合端點取消／標記已付款，教練自己排的課預約網站動不到
+    source_booking_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     student: Mapped["Student"] = relationship(back_populates="lessons")
     venue: Mapped["Venue"] = relationship(back_populates="lessons")
