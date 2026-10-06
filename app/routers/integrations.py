@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.auth import verify_booking_token_or_login, verify_public_booking_token
 from app.database import get_db
+from app.package_logic import describe_lesson_time, find_overlapping_lesson
 from app.models import LessonStatus, PaymentStatus, Tier
 from app.pricing import resolve_price
 
@@ -99,20 +100,13 @@ def create_lesson_from_public_booking(
     if venue is None:
         raise HTTPException(status_code=400, detail=f"找不到場館「{payload.venue_name}」")
 
-    # 衝突判斷比照 app/package_logic.py 的 mark_leave_and_reschedule：同一個
-    # 時間點教練只能上一堂課，不分場地——這是教練自己的行事曆衝突，不是
-    # 場地容量問題
-    conflict = (
-        db.query(models.Lesson)
-        .filter(
-            models.Lesson.date == payload.date,
-            models.Lesson.start_time == payload.start_time,
-            models.Lesson.status != LessonStatus.CANCELLED,
-        )
-        .first()
-    )
+    # 時段重疊就擋，不分場地（教練同一時間只能上一堂），見 find_overlapping_lesson
+    conflict = find_overlapping_lesson(db, payload.date, payload.start_time, payload.duration)
     if conflict is not None:
-        raise HTTPException(status_code=409, detail="這個時間教練已經有其他課程了")
+        raise HTTPException(
+            status_code=409,
+            detail=f"這個時段教練已經有其他課程了（{describe_lesson_time(conflict)}）",
+        )
 
     # v1 刻意簡化：姓名＋聯絡方式完全相符才算同一人，找不到就新增一筆新學生，
     # 不做模糊比對／自動合併，重複學生由教練事後自己在教練工具裡手動處理

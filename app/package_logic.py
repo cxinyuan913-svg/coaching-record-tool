@@ -1,5 +1,5 @@
 """套組批次排課、剩餘堂數重算、請假順延邏輯（見 SPEC.md 套組批次排課／請假順延）。"""
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -8,6 +8,40 @@ from app import models
 from app.models import AdjustmentType, LessonStatus, PackageStatus
 from app.pricing import resolve_price
 from app.timeutil import today_taipei
+
+
+# 占用教練時段的課程狀態：請假、取消都視為時段已空出（跟找空檔的規則一致）
+OCCUPYING_STATUSES = (LessonStatus.SCHEDULED, LessonStatus.COMPLETED)
+
+
+def find_overlapping_lesson(
+    db: Session, day, start_time, duration: int, exclude_lesson_id: int | None = None
+) -> models.Lesson | None:
+    """這個時段有沒有跟既有課程重疊：新課開始 < 既有課結束 且 新課結束 > 既有課開始。
+
+    不分場館——教練同一時間只能上一堂課，這是教練的行事曆衝突，不是場地容量問題。
+    首尾剛好相接（例如 16:00–18:00 與 18:00 開始）不算衝突。
+    以前只比對「開始時間完全相同」，16:00–18:00 的課後面再排 17:00 開始的課不會被擋。
+    """
+    start = datetime.combine(day, start_time)
+    end = start + timedelta(minutes=duration)
+    query = db.query(models.Lesson).filter(
+        models.Lesson.date == day, models.Lesson.status.in_(OCCUPYING_STATUSES)
+    )
+    if exclude_lesson_id is not None:
+        query = query.filter(models.Lesson.id != exclude_lesson_id)
+    for lesson in query.order_by(models.Lesson.start_time):
+        l_start = datetime.combine(lesson.date, lesson.start_time)
+        l_end = l_start + timedelta(minutes=lesson.duration)
+        if l_start < end and start < l_end:
+            return lesson
+    return None
+
+
+def describe_lesson_time(lesson: models.Lesson) -> str:
+    start = datetime.combine(lesson.date, lesson.start_time)
+    end = start + timedelta(minutes=lesson.duration)
+    return f"{start:%H:%M}-{end:%H:%M}"
 
 
 def generate_package_lessons(
@@ -142,20 +176,14 @@ def mark_leave_and_reschedule(
     if makeup_start_time is None:
         makeup_start_time = package.recur_start_time
 
-    conflict = (
-        db.query(models.Lesson)
-        .filter(
-            models.Lesson.date == makeup_date,
-            models.Lesson.start_time == makeup_start_time,
-            models.Lesson.status != LessonStatus.CANCELLED,
-            models.Lesson.id != lesson.id,
-        )
-        .first()
+    conflict = find_overlapping_lesson(
+        db, makeup_date, makeup_start_time, package.session_duration, exclude_lesson_id=lesson.id
     )
     if conflict is not None:
         raise HTTPException(
             status_code=409,
-            detail=f"{makeup_date} {makeup_start_time} 已有其他課程，請指定其他順延時間",
+            detail=f"{makeup_date} {makeup_start_time:%H:%M} 跟已有的 {describe_lesson_time(conflict)} 課程重疊，"
+            "請指定其他順延時間",
         )
 
     makeup_lesson = models.Lesson(

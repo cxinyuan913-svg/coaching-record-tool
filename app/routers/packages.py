@@ -1,6 +1,4 @@
 """套組課程 CRUD API：批次排課、剩餘堂數、付款狀態。"""
-from datetime import datetime, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -10,6 +8,8 @@ from app.models import LessonStatus, PackageStatus, PaymentStatus
 from app.package_logic import (
     available_sessions,
     count_booked_sessions,
+    describe_lesson_time,
+    find_overlapping_lesson,
     generate_package_lessons,
     live_status,
     recompute_package_pricing,
@@ -64,28 +64,14 @@ def list_packages(
 
 
 def find_conflicts(db: Session, dates: list, start_times: dict | None, default_start, duration: int) -> list[str]:
-    """一鍵建立套組前的最後檢查：每堂跟既有課程（排定／已完成，不限場館）有沒有時間重疊。
+    """一鍵建立套組前的最後檢查：每堂跟既有課程（不限場館）有沒有時段重疊。
     從找空檔排好到按下建立之間行事曆可能被改過，不檢查會變成同一時間兩堂課。"""
-    existing = (
-        db.query(models.Lesson)
-        .filter(
-            models.Lesson.date.in_(dates),
-            models.Lesson.status.in_((LessonStatus.SCHEDULED, LessonStatus.COMPLETED)),
-        )
-        .all()
-    )
     conflicts = []
     for d in dates:
-        start = datetime.combine(d, (start_times or {}).get(d, default_start))
-        end = start + timedelta(minutes=duration)
-        for lesson in existing:
-            if lesson.date != d:
-                continue
-            l_start = datetime.combine(lesson.date, lesson.start_time)
-            l_end = l_start + timedelta(minutes=lesson.duration)
-            if l_start < end and start < l_end:
-                conflicts.append(f"{d.month}/{d.day} {start:%H:%M}（已有 {l_start:%H:%M}-{l_end:%H:%M} 的課）")
-                break
+        start = (start_times or {}).get(d, default_start)
+        lesson = find_overlapping_lesson(db, d, start, duration)
+        if lesson is not None:
+            conflicts.append(f"{d.month}/{d.day} {start:%H:%M}（已有 {describe_lesson_time(lesson)} 的課）")
     return conflicts
 
 
