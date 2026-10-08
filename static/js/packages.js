@@ -203,8 +203,16 @@ async function loadPackages() {
   ]);
   const unsettledPackageIds = new Set(unsettled.map((a) => a.package_id));
 
+  // 上完（已完成／已過期）且已收款、沒有未結清差額的才收進「已上完」區；
+  // 上完但還沒收錢或還有差額的留在上方，免得收起來就忘了去收
+  const isFinished = (p) =>
+    p.status !== "active" && p.payment_status === "paid" && !unsettledPackageIds.has(p.id);
+
   const tbody = document.getElementById("package-list");
+  const finishedBody = document.getElementById("finished-list");
   tbody.innerHTML = "";
+  finishedBody.innerHTML = "";
+  let finishedCount = 0;
   packages.forEach((p) => {
     const paymentClass = p.payment_status === "paid" ? "status-paid" : "status-unpaid";
     const settlementClass = unsettledPackageIds.has(p.id) ? "status-unpaid" : "secondary";
@@ -228,8 +236,17 @@ async function loadPackages() {
         <button class="danger" data-action="delete" data-id="${p.id}">刪除</button>
       </td>
     `;
-    tbody.appendChild(tr);
+    if (isFinished(p)) {
+      finishedBody.appendChild(tr);
+      finishedCount++;
+    } else {
+      tbody.appendChild(tr);
+    }
   });
+  if (tbody.children.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8">目前沒有進行中的套組</td></tr>';
+  }
+  document.getElementById("finished-count").textContent = finishedCount;
 }
 
 function escapeHtml(str) {
@@ -497,6 +514,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("package-form").addEventListener("submit", handleSave);
   document.getElementById("package-list").addEventListener("click", handleListClick);
+  document.getElementById("finished-list").addEventListener("click", handleListClick);
   document.getElementById("btn-settlement-close").addEventListener("click", () => {
     document.getElementById("settlement-modal").classList.remove("open");
   });

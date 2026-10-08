@@ -24,21 +24,45 @@
       <h1>課程套組</h1>
       <button id="btn-add">新增套組</button>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th>學生</th>
-          <th>名稱</th>
-          <th>時長</th>
-          <th>剩餘/總堂數</th>
-          <th>單堂攤提</th>
-          <th>狀態</th>
-          <th>收款</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody id="package-list"></tbody>
-    </table>
+    <div class="section-block">
+      <table>
+        <thead>
+          <tr>
+            <th>學生</th>
+            <th>名稱</th>
+            <th>時長</th>
+            <th>剩餘/總堂數</th>
+            <th>單堂攤提</th>
+            <th>狀態</th>
+            <th>收款</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="package-list"></tbody>
+      </table>
+    </div>
+
+    <!-- 已上完、已收款且沒有未結清差額的套組收在這裡，避免列表越積越長 -->
+    <div class="section-block">
+      <details>
+        <summary><h2 style="display:inline">已上完（<span id="finished-count">0</span> 套，點擊展開）</h2></summary>
+        <table class="dimmed-table">
+          <thead>
+            <tr>
+              <th>學生</th>
+              <th>名稱</th>
+              <th>時長</th>
+              <th>剩餘/總堂數</th>
+              <th>單堂攤提</th>
+              <th>狀態</th>
+              <th>收款</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="finished-list"></tbody>
+        </table>
+      </details>
+    </div>
   </main>
 
   <div class="modal-backdrop" id="package-modal">
