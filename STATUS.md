@@ -219,7 +219,7 @@ GET `/api/health`（公開，給 Docker HEALTHCHECK）✅
 
 | 工作 | 觸發條件 | 防重複機制 | 狀態 |
 |---|---|---|---|
-| 隔天課程總覽 | 每天台灣時間 **18:00 起**，列出隔天所有 scheduled 課程；**沒課也發**（兼作系統存活訊號） | `scheduler_state.json` 的 `last_daily_digest_date`，同日只發一次；發送失敗下一分鐘重試 | ✅ |
+| 未來三天課程總覽 | 每天台灣時間 **18:00 起**，列出明天起三天所有 scheduled 課程，逐日列出、沒課的那天寫「沒有課」；**三天都沒課也發一行**（兼作系統存活訊號） | `scheduler_state.json` 的 `last_daily_digest_date`，同日只發一次；發送失敗下一分鐘重試 | ✅ |
 | 套組即將結束 | 套組最後一堂（排除 cancelled）落在今天～+7 天 | `packages.ending_reminder_sent` 旗標，發過不再發 | ✅ |
 | 逾期未收款／未結算 | 超過 `UNPAID_REMINDER_DAYS`（預設 3 天）的未收款課程、未收款套組、未結清差額，彙整成一則 | `scheduler_state.json` 的 `last_unpaid_reminder_date`，**每天都會再提醒**直到收款 | ✅ |
 

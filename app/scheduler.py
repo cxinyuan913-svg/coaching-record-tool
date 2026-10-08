@@ -1,14 +1,14 @@
-"""背景提醒排程：隔天課程總覽、套組即將結束提醒、逾期未收款/未結算提醒。
+"""背景提醒排程：未來三天課程總覽、套組即將結束提醒、逾期未收款/未結算提醒。
 
 用一條每分鐘檢查一次的背景執行緒，不引入額外的排程套件（APScheduler 等），
 維持專案「能用簡單方式就不加依賴」的風格。
 
 三項提醒各自的防重複機制不同：
-- 隔天課程總覽：每天台灣時間 18:00 起發一則，列出隔天所有排定的課（沒課也發
-  一則「明天沒有課」，順便當作提醒系統有在運作的訊號）。用狀態檔記錄「今天發
-  過了沒」，同一天只發一次；18:00 剛好伺服器在重開的話，恢復後當晚會補發。
-  （2026-10 教練要求，取代原本的「上課前一小時」逐堂提醒；lessons 表的
-  hour_reminder_sent 欄位保留但不再使用。）
+- 未來三天課程總覽：每天台灣時間 18:00 起發一則，列出明天起三天所有排定的課
+  （沒課也發，順便當作提醒系統有在運作的訊號）。用狀態檔記錄「今天發過了沒」，
+  同一天只發一次；18:00 剛好伺服器在重開的話，恢復後當晚會補發。
+  （2026-10 教練要求，取代原本的「上課前一小時」逐堂提醒，之後再從隔天一天
+  改成三天；lessons 表的 hour_reminder_sent 欄位保留但不再使用。）
 - 套組結束提醒：在 packages 表上有一個已發送旗標欄位，發過就不會再發。
 - 逾期未收款/未結算提醒：故意「只要還沒收款，每天都會再提醒一次」，用一個
   記錄「今天發過了沒」的日期值判斷，不用旗標——這是設計上的選擇，提醒到你
@@ -93,8 +93,18 @@ DAILY_DIGEST_TIME = time_of_day(18, 0)
 WEEKDAY_ZH = "一二三四五六日"
 
 
+DIGEST_DAYS = 3  # 總覽涵蓋從明天起算幾天（2026-10 教練要求從隔天一天改成三天）
+
+
+def _format_day(day: date) -> str:
+    return f"{day.month}/{day.day}（{WEEKDAY_ZH[day.weekday()]}）"
+
+
 def _check_daily_lesson_digest(db: Session) -> None:
-    """每天 18:00 起發一次隔天的課程總覽；同一天只發一次，發送失敗下一分鐘會再試。"""
+    """每天 18:00 起發一次未來三天（明天起）的課程總覽；同一天只發一次，發送失敗下一分鐘會再試。
+
+    每一天都列出來，沒課的那天寫「沒有課」，一眼看得出哪天有空；三天都沒課只發一行。
+    """
     now = now_taipei()
     if now.time() < DAILY_DIGEST_TIME:
         return
@@ -102,23 +112,35 @@ def _check_daily_lesson_digest(db: Session) -> None:
     if _load_state_date("last_daily_digest_date") == today:
         return
 
-    tomorrow = today + timedelta(days=1)
+    days = [today + timedelta(days=i) for i in range(1, DIGEST_DAYS + 1)]
     lessons = (
         db.query(models.Lesson)
-        .filter(models.Lesson.date == tomorrow, models.Lesson.status == LessonStatus.SCHEDULED)
-        .order_by(models.Lesson.start_time)
+        .filter(
+            models.Lesson.date >= days[0],
+            models.Lesson.date <= days[-1],
+            models.Lesson.status == LessonStatus.SCHEDULED,
+        )
+        .order_by(models.Lesson.date, models.Lesson.start_time)
         .all()
     )
-    day = f"{tomorrow.month}/{tomorrow.day}（{WEEKDAY_ZH[tomorrow.weekday()]}）"
-    if lessons:
-        lines = [f"📅 明天 {day}共 {len(lessons)} 堂課"]
-        for lesson in lessons:
-            start = datetime.combine(lesson.date, lesson.start_time)
-            end = start + timedelta(minutes=lesson.duration)
-            lines.append(f"・{start:%H:%M}～{end:%H:%M} {lesson.student.name}｜{lesson.venue.name}")
-        message = "\n".join(lines)
+    span = f"{days[0].month}/{days[0].day}～{days[-1].month}/{days[-1].day}"
+    if not lessons:
+        message = f"📅 未來三天（{span}）都沒有課"
     else:
-        message = f"📅 明天 {day}沒有課"
+        lines = [f"📅 未來三天課程（{span}）"]
+        for day in days:
+            day_lessons = [lesson for lesson in lessons if lesson.date == day]
+            label = ("明天 " if day == days[0] else "") + _format_day(day)
+            lines.append("")
+            if not day_lessons:
+                lines.append(f"{label}沒有課")
+                continue
+            lines.append(f"{label}共 {len(day_lessons)} 堂")
+            for lesson in day_lessons:
+                start = datetime.combine(lesson.date, lesson.start_time)
+                end = start + timedelta(minutes=lesson.duration)
+                lines.append(f"・{start:%H:%M}～{end:%H:%M} {lesson.student.name}｜{lesson.venue.name}")
+        message = "\n".join(lines)
 
     if send_discord_notification(message):
         _save_state_date("last_daily_digest_date", today)

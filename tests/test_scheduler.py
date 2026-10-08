@@ -312,7 +312,7 @@ def _freeze(monkeypatch, when: datetime) -> None:
     monkeypatch.setattr(scheduler, "now_taipei", lambda: when)
 
 
-def test_隔天課程總覽在十八點後發一次列出隔天排定課程且不重複(client, monkeypatch):
+def test_課程總覽在十八點後發一次列出未來三天排定課程且不重複(client, monkeypatch):
     _reset_unpaid_reminder_state()
     student = create_student(client, name="小明")
     other = create_student(client, name="小華")
@@ -323,7 +323,9 @@ def test_隔天課程總覽在十八點後發一次列出隔天排定課程且�
     _add_lesson(student["id"], venue["id"], tomorrow, time(10, 0), duration=120)
     _add_lesson(student["id"], venue["id"], tomorrow, time(14, 0), status=LessonStatus.LEAVE)
     _add_lesson(student["id"], venue["id"], tomorrow, time(15, 0), status=LessonStatus.CANCELLED)
-    _add_lesson(student["id"], venue["id"], date(2030, 1, 9), time(9, 0))  # 後天的課不列
+    _add_lesson(other["id"], venue["id"], date(2030, 1, 10), time(9, 0))  # 第三天
+    _add_lesson(student["id"], venue["id"], date(2030, 1, 7), time(20, 0))  # 今天的課不列
+    _add_lesson(student["id"], venue["id"], date(2030, 1, 11), time(9, 0))  # 第四天不列
 
     _freeze(monkeypatch, datetime(2030, 1, 7, 17, 59))
     with SessionLocal() as db:
@@ -334,9 +336,16 @@ def test_隔天課程總覽在十八點後發一次列出隔天排定課程且�
     with SessionLocal() as db:
         scheduler._check_daily_lesson_digest(db)
     assert messages == [
-        "📅 明天 1/8（二）共 2 堂課\n"
+        "📅 未來三天課程（1/8～1/10）\n"
+        "\n"
+        "明天 1/8（二）共 2 堂\n"
         "・10:00～12:00 小明｜快羽會館\n"
-        "・19:00～20:00 小華｜快羽會館"
+        "・19:00～20:00 小華｜快羽會館\n"
+        "\n"
+        "1/9（三）沒有課\n"
+        "\n"
+        "1/10（四）共 1 堂\n"
+        "・09:00～10:00 小華｜快羽會館"
     ]
 
     # 同一天晚一點再檢查（例如伺服器重開），不會重發
@@ -346,13 +355,13 @@ def test_隔天課程總覽在十八點後發一次列出隔天排定課程且�
     assert len(messages) == 1
 
 
-def test_隔天沒課也會發一則讓教練知道提醒系統有在運作(client, monkeypatch):
+def test_未來三天都沒課也會發一則讓教練知道提醒系統有在運作(client, monkeypatch):
     _reset_unpaid_reminder_state()
     messages = _sent_messages(monkeypatch)
     _freeze(monkeypatch, datetime(2030, 1, 7, 18, 5))
     with SessionLocal() as db:
         scheduler._check_daily_lesson_digest(db)
-    assert messages == ["📅 明天 1/8（二）沒有課"]
+    assert messages == ["📅 未來三天（1/8～1/10）都沒有課"]
 
 
 def test_隔天課程總覽發送失敗會在下一次檢查重試(client, monkeypatch):
