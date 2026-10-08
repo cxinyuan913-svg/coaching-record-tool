@@ -74,10 +74,15 @@ def generate_package_lessons(
 
 
 def _is_used_up(lesson: models.Lesson) -> bool:
-    """這堂是否已經算「用掉」：完成／取消，或上課日期已經過了（不用每堂手動標記完成才會扣）。"""
-    if not lesson.deduct_session:
+    """這堂是否已經算「用掉」：已完成，或上課日期已經過了（不用每堂手動標記完成才會扣）。
+
+    取消的課不扣堂，跟請假一樣把額度還回套組——跟 count_booked_sessions 的規則一致。
+    以前取消也算用掉，但「可再排堂數」又不算它占用，結果取消一堂、再補排一堂後
+    13 堂全排滿，剩餘卻顯示 12/13。學生臨時不來要照扣的話，那堂維持排定或標記完成。
+    """
+    if not lesson.deduct_session or lesson.status == LessonStatus.CANCELLED:
         return False
-    if lesson.status in (LessonStatus.COMPLETED, LessonStatus.CANCELLED):
+    if lesson.status == LessonStatus.COMPLETED:
         return True
     return lesson.date < today_taipei()
 

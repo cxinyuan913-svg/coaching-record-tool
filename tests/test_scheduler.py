@@ -255,10 +255,11 @@ def test_套組差額要等套組全部堂數用完才提醒不看天數(client,
         scheduler._check_unpaid_reminders(db)
     assert messages == []
 
-    # 套組全部堂數用完（把還沒上的那堂取消掉）：現在應該要被提醒了
+    # 套組全部堂數用完（把還沒上的那堂標記完成）：現在應該要被提醒了
+    # （取消不扣堂、額度會還回套組，所以不能用取消來模擬用完）
     _reset_unpaid_reminder_state()
     with SessionLocal() as db:
-        db.get(Lesson, pending_lesson_id).status = LessonStatus.CANCELLED
+        db.get(Lesson, pending_lesson_id).status = LessonStatus.COMPLETED
         db.commit()
         scheduler._check_unpaid_reminders(db)
     assert len(messages) == 1
