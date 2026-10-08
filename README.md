@@ -25,7 +25,7 @@
 |---|---|
 | 後端 | Python 3.11、FastAPI、SQLAlchemy、SQLite |
 | 前端 | 原生 HTML／CSS／JavaScript、FullCalendar（不使用前端框架） |
-| 測試 | pytest（145 個測試，每個測試都用獨立的暫存資料庫） |
+| 測試 | pytest（179 個測試，每個測試都用獨立的暫存資料庫） |
 | 部署 | Docker Compose、Caddy（反向代理＋Let's Encrypt 自動 HTTPS）、Vultr VPS（Ubuntu）、Cloudflare DNS |
 
 ## 架構
