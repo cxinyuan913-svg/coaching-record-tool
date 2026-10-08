@@ -231,6 +231,7 @@ async function loadPackages() {
       </td>
       <td>
         <button class="secondary" data-action="edit" data-id="${p.id}">編輯</button>
+        <button class="secondary" data-action="lessons" data-id="${p.id}">課程清單</button>
         <button class="secondary" data-action="message" data-id="${p.id}">課程訊息</button>
         <button class="${settlementClass}" data-action="settlement" data-id="${p.id}">結算單</button>
         <button class="danger" data-action="delete" data-id="${p.id}">刪除</button>
@@ -466,6 +467,46 @@ async function openMessageModal(packageId) {
   document.getElementById("message-modal").classList.add("open");
 }
 
+// 課程清單：給教練自己看這個套組每一堂排在哪天、幾點、哪個場地（含請假／取消紀錄）
+const LESSON_STATUS_LABEL = { scheduled: "排定", completed: "已上完", leave: "請假", cancelled: "取消" };
+
+async function openLessonsModal(packageId) {
+  const [pkg, lessons] = await Promise.all([
+    api.get(`/api/packages/${packageId}`),
+    api.get(`/api/packages/${packageId}/lessons`),
+  ]);
+  document.getElementById("lessons-title").textContent = `課程清單：${pkg.student_name}／${pkg.name}`;
+  const tbody = document.getElementById("lessons-list");
+  tbody.innerHTML = "";
+  if (lessons.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5">目前還沒有排課</td></tr>';
+  }
+  const today = toLocalDateString(new Date());
+  // 堂次跟「課程訊息」一致：只替有上課的堂依日期順序編號，請假／取消不佔堂次
+  // （資料庫的 sequence_no 補課是空的、單堂新增會跳號，不直接拿來顯示）
+  let seq = 0;
+  lessons
+    .slice()
+    .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time))
+    .forEach((lesson) => {
+      const start = lesson.start_time.slice(0, 5);
+      // 日期已過的排定課程，剩餘堂數已經算用掉，這裡也顯示成已上完
+      const status =
+        lesson.status === "scheduled" && lesson.date < today ? "completed" : lesson.status;
+      const tr = document.createElement("tr");
+      if (lesson.date < today) tr.style.opacity = "0.5";
+      tr.innerHTML = `
+        <td>${lesson.status === "leave" || lesson.status === "cancelled" ? "—" : `第 ${++seq} 堂`}${lesson.makeup_for_lesson_id ? "（補課）" : ""}</td>
+        <td>${formatDateWithWeekday(lesson.date)}</td>
+        <td>${start}～${addMinutes(start, lesson.duration)}</td>
+        <td>${escapeHtml(lesson.venue_name)}</td>
+        <td>${LESSON_STATUS_LABEL[status] || status}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  document.getElementById("lessons-modal").classList.add("open");
+}
+
 async function handleCopyMessage() {
   const text = document.getElementById("message-text").value;
   try {
@@ -491,6 +532,8 @@ async function handleListClick(e) {
   } else if (btn.dataset.action === "edit") {
     const pkg = await api.get(`/api/packages/${id}`);
     openModal(pkg);
+  } else if (btn.dataset.action === "lessons") {
+    await openLessonsModal(id);
   } else if (btn.dataset.action === "message") {
     await openMessageModal(id);
   } else if (btn.dataset.action === "settlement") {
@@ -523,6 +566,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("message-modal").classList.remove("open");
   });
   document.getElementById("btn-message-copy").addEventListener("click", handleCopyMessage);
+  document.getElementById("btn-lessons-close").addEventListener("click", () => {
+    document.getElementById("lessons-modal").classList.remove("open");
+  });
   document.getElementById("f-start-date").addEventListener("change", updateWeekdayHint);
   document.getElementById("f-coach-fee").addEventListener("input", updateEstimatedTotal);
   document.getElementById("f-venue-fee").addEventListener("input", updateEstimatedTotal);
