@@ -7,6 +7,13 @@ let editingLesson = null;
 let editingPackage = null;
 let calendar = null;
 
+// 一次預訂多堂（單堂收費）用的狀態：dateMode 為 "single" 或 "multi"
+const WEEKDAY_LABEL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+let dateMode = "single";
+let selectedDates = [];
+let pickerViewYear = null;
+let pickerViewMonth = null;
+
 function populateSelect(id, items, labelFn) {
   const select = document.getElementById(id);
   select.innerHTML = "";
@@ -207,6 +214,150 @@ async function handlePackageSelectChange() {
   updateTotalAmountDisplay();
 }
 
+// ===== 一次預訂多堂：月曆點選多個日期（做法與課程套組頁的日期挑選一致）=====
+
+function formatDateChip(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAY_LABEL[d.getDay()][1]}）`;
+}
+
+function renderDateList() {
+  selectedDates.sort();
+  const ul = document.getElementById("l-date-list");
+  ul.innerHTML = "";
+  selectedDates.forEach((dateStr) => {
+    const li = document.createElement("li");
+    li.style.cssText =
+      "background:#eef0f4;border-radius:4px;padding:4px 8px;display:flex;align-items:center;gap:6px;font-size:13px";
+    li.innerHTML = `${formatDateChip(dateStr)} <button type="button" class="danger" data-remove-date="${dateStr}" style="padding:1px 6px">×</button>`;
+    ul.appendChild(li);
+  });
+  document.getElementById("l-date-count").textContent = selectedDates.length;
+}
+
+function addDate(dateStr) {
+  if (!dateStr || selectedDates.includes(dateStr)) return;
+  selectedDates.push(dateStr);
+  renderDateList();
+  renderDatePicker();
+}
+
+function removeDate(dateStr) {
+  selectedDates = selectedDates.filter((d) => d !== dateStr);
+  renderDateList();
+  renderDatePicker();
+}
+
+function toggleDate(dateStr) {
+  if (selectedDates.includes(dateStr)) {
+    removeDate(dateStr);
+  } else {
+    addDate(dateStr);
+  }
+}
+
+function handleQuickFill() {
+  const start = document.getElementById("l-quick-start").value;
+  const interval = parseInt(document.getElementById("l-quick-interval").value, 10) || 7;
+  const count = parseInt(document.getElementById("l-quick-count").value, 10) || 0;
+  if (!start || count < 1) {
+    alert("請填「從」的日期與堂數");
+    return;
+  }
+  const base = new Date(start + "T00:00:00");
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i * interval);
+    addDate(toLocalDateString(d));
+  }
+  setPickerView(base.getFullYear(), base.getMonth());
+}
+
+function handleDateListClick(e) {
+  const btn = e.target.closest("button[data-remove-date]");
+  if (!btn) return;
+  removeDate(btn.dataset.removeDate);
+}
+
+function setPickerView(year, month) {
+  const d = new Date(year, month, 1);
+  pickerViewYear = d.getFullYear();
+  pickerViewMonth = d.getMonth();
+  renderDatePicker();
+}
+
+function shiftPickerMonth(delta) {
+  setPickerView(pickerViewYear, pickerViewMonth + delta);
+}
+
+function renderDatePicker() {
+  if (pickerViewYear === null) return;
+  document.getElementById("l-picker-label").textContent = `${pickerViewYear}年${pickerViewMonth + 1}月`;
+  const grid = document.getElementById("l-picker-grid");
+  grid.innerHTML = "";
+  WEEKDAY_LABEL.forEach((w) => {
+    const cell = document.createElement("div");
+    cell.style.cssText = "font-weight:600;color:#888;padding:4px 0";
+    cell.textContent = w[1];
+    grid.appendChild(cell);
+  });
+  const startOffset = new Date(pickerViewYear, pickerViewMonth, 1).getDay();
+  const daysInMonth = new Date(pickerViewYear, pickerViewMonth + 1, 0).getDate();
+  for (let i = 0; i < startOffset; i++) {
+    grid.appendChild(document.createElement("div"));
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = toLocalDateString(new Date(pickerViewYear, pickerViewMonth, day));
+    const selected = selectedDates.includes(dateStr);
+    const holiday = isHoliday(dateStr);
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.textContent = day;
+    cell.dataset.date = dateStr;
+    if (holiday) cell.title = holidayName(dateStr);
+    let border = "#e0e0e0";
+    let background = holiday ? "#fdf1ef" : "#fff";
+    let color = holiday ? "#c0503c" : "#333";
+    if (selected) {
+      border = "#2a78d6";
+      background = "#2a78d6";
+      color = "#fff";
+    }
+    cell.style.cssText = `padding:6px 0;border:1px solid ${border};border-radius:4px;background:${background};color:${color};cursor:pointer;font-weight:${selected ? "600" : "400"}`;
+    grid.appendChild(cell);
+  }
+}
+
+function handlePickerGridClick(e) {
+  const btn = e.target.closest("button[data-date]");
+  if (!btn) return;
+  toggleDate(btn.dataset.date);
+}
+
+// 切換「單一日期」／「一次預訂多堂」：顯示狀態與 required 一定要一起改——
+// 隱藏起來的 required 欄位會讓瀏覽器悄悄擋下送出，又不給任何錯誤訊息
+// （新增套組表單曾經踩過同一個坑）。
+function setDateMode(mode) {
+  dateMode = mode;
+  const multi = mode === "multi";
+  document.getElementById("mode-single-date").checked = !multi;
+  document.getElementById("mode-multi-date").checked = multi;
+  document.getElementById("row-date").style.display = multi ? "none" : "";
+  document.getElementById("f-date").required = !multi;
+  document.getElementById("row-multi-dates").style.display = multi ? "" : "none";
+  document.getElementById("multi-date-note").style.display = multi ? "" : "none";
+  // 批次建立一律是單堂計費、建成未收款，所以套組與收款狀態這兩欄不適用
+  document.getElementById("row-package").style.display = multi ? "none" : "";
+  document.getElementById("row-payment").style.display = multi ? "none" : "";
+  if (multi) {
+    document.getElementById("f-package").value = "";
+    document.getElementById("f-payment").value = "unpaid";
+    handlePackageSelectChange();
+    renderDateList();
+    renderDatePicker();
+  }
+}
+
 function openCreateModal(dateStr) {
   if (students.length === 0 || venues.length === 0) {
     alert("請先至「學生管理」與「場地管理」新增資料");
@@ -220,6 +371,12 @@ function openCreateModal(dateStr) {
   document.getElementById("f-student").selectedIndex = 0;
   document.getElementById("f-venue").selectedIndex = 0;
   document.getElementById("f-date").value = dateStr || "";
+  document.getElementById("row-date-mode").style.display = "";
+  selectedDates = [];
+  document.getElementById("l-quick-start").value = dateStr || "";
+  const pickerBase = dateStr ? new Date(dateStr + "T00:00:00") : new Date();
+  setPickerView(pickerBase.getFullYear(), pickerBase.getMonth());
+  setDateMode("single");
   document.getElementById("f-time-hour").value = "";
   document.getElementById("f-time-minute").value = "00";
   document.getElementById("f-duration").value = 60;
@@ -238,6 +395,9 @@ function openCreateModal(dateStr) {
 }
 
 async function openEditModal(lessonId) {
+  // 編輯永遠是針對一堂課，多日期模式不適用
+  setDateMode("single");
+  document.getElementById("row-date-mode").style.display = "none";
   const lesson = await api.get(`/api/lessons/${lessonId}`);
   editingLessonId = lesson.id;
   editingLesson = lesson;
@@ -373,6 +533,34 @@ async function handleLeaveFlow() {
 
 async function handleSave(e) {
   e.preventDefault();
+
+  // 一次預訂多堂：走批次端點。每堂獨立、一律未收款、不掛套組；
+  // 只要有一天撞課，後端會整批退回並列出是哪幾天。
+  if (!editingLessonId && dateMode === "multi") {
+    if (selectedDates.length === 0) {
+      alert("請至少在月曆上選一個上課日期");
+      return;
+    }
+    const batchPayload = {
+      student_id: parseInt(document.getElementById("f-student").value, 10),
+      venue_id: parseInt(document.getElementById("f-venue").value, 10),
+      dates: selectedDates,
+      start_time: getTimeSelectValue("f-time-hour", "f-time-minute") + ":00",
+      duration: parseInt(document.getElementById("f-duration").value, 10),
+      headcount: parseInt(document.getElementById("f-headcount").value, 10),
+      revenue_amount: parseFloat(document.getElementById("f-amount").value),
+      venue_fee_amount: parseFloat(document.getElementById("f-venue-fee").value) || 0,
+    };
+    try {
+      const result = await api.post("/api/lessons/batch", batchPayload);
+      closeModal();
+      calendar.refetchEvents();
+      alert(`已建立 ${result.created} 堂課，全部為未收款`);
+    } catch (err) {
+      alert("建立失敗：" + err.message);
+    }
+    return;
+  }
   const newStatus = document.getElementById("f-status").value;
   const isPackage = editingLesson && !!editingLesson.package_id;
 
@@ -430,7 +618,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-cancel").addEventListener("click", closeModal);
   document.getElementById("btn-delete").addEventListener("click", handleDelete);
   document.getElementById("lesson-form").addEventListener("submit", handleSave);
-  document.getElementById("f-student").addEventListener("change", loadPackageOptionsForStudent);
+  document.getElementById("f-student").addEventListener("change", async () => {
+    await loadPackageOptionsForStudent();
+    // 多日期模式不吃套組，換學生時別讓「有額度就自動選套組」把金額欄位鎖住
+    if (dateMode === "multi") {
+      document.getElementById("f-package").value = "";
+      await handlePackageSelectChange();
+    }
+  });
+  document.getElementById("mode-single-date").addEventListener("change", () => setDateMode("single"));
+  document.getElementById("mode-multi-date").addEventListener("change", () => setDateMode("multi"));
+  document.getElementById("l-picker-prev").addEventListener("click", () => shiftPickerMonth(-1));
+  document.getElementById("l-picker-next").addEventListener("click", () => shiftPickerMonth(1));
+  document.getElementById("l-picker-grid").addEventListener("click", handlePickerGridClick);
+  document.getElementById("l-date-list").addEventListener("click", handleDateListClick);
+  document.getElementById("l-btn-quick-fill").addEventListener("click", handleQuickFill);
   document.getElementById("f-package").addEventListener("change", handlePackageSelectChange);
   document.getElementById("f-headcount").addEventListener("input", refreshSuggestedPrice);
   document.getElementById("f-duration").addEventListener("change", refreshSuggestedPrice);

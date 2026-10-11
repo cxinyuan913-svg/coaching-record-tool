@@ -53,10 +53,68 @@
           <label for="f-venue">場地</label>
           <select id="f-venue" required></select>
         </div>
-        <div class="form-row">
-          <label for="f-date">日期</label>
+        <div class="form-row" id="row-date-mode">
+          <label>日期</label>
+          <div style="display: flex; gap: 16px; align-items: center; font-size: 14px">
+            <label style="display: flex; align-items: center; gap: 4px; font-weight: 400">
+              <input type="radio" name="date-mode" id="mode-single-date" value="single" checked /> 單一日期
+            </label>
+            <label style="display: flex; align-items: center; gap: 4px; font-weight: 400">
+              <input type="radio" name="date-mode" id="mode-multi-date" value="multi" /> 一次預訂多堂
+            </label>
+          </div>
+        </div>
+        <div class="form-row" id="row-date">
+          <label for="f-date">上課日期</label>
           <input id="f-date" type="date" required />
         </div>
+        <div class="form-row" id="row-multi-dates" style="display: none">
+          <label>上課日期（直接在月曆上點選，可跨月份累積；點已選的日期可取消）</label>
+          <div id="l-date-picker" style="border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fff">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
+              <button type="button" id="l-picker-prev" class="secondary" style="padding: 2px 10px">‹</button>
+              <strong id="l-picker-label" style="font-size: 14px"></strong>
+              <button type="button" id="l-picker-next" class="secondary" style="padding: 2px 10px">›</button>
+            </div>
+            <div
+              id="l-picker-grid"
+              style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; font-size: 12px"
+            ></div>
+          </div>
+          <div
+            style="
+              margin-top: 8px;
+              padding: 8px;
+              background: #f5f6f8;
+              border-radius: 6px;
+              font-size: 12px;
+              color: #666;
+              display: flex;
+              gap: 6px;
+              align-items: center;
+              flex-wrap: wrap;
+            "
+          >
+            快速帶入：從
+            <input id="l-quick-start" type="date" style="width: 140px" />
+            起，每
+            <input id="l-quick-interval" type="number" min="1" value="7" style="width: 50px" />
+            天一堂，共
+            <input id="l-quick-count" type="number" min="1" value="4" style="width: 50px" />
+            堂
+            <button type="button" id="l-btn-quick-fill" class="secondary">產生</button>
+          </div>
+          <ul
+            id="l-date-list"
+            style="list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px"
+          ></ul>
+          <div style="font-size: 12px; color: #555; margin-top: 8px">
+            已選 <strong id="l-date-count">0</strong> 堂
+          </div>
+        </div>
+        <p id="multi-date-note" style="display: none; font-size: 13px; color: #888; margin: 0 0 12px">
+          一次預訂多堂：每一堂都是各自獨立的單堂課，全部建成未收款，之後在行事曆上逐堂收費。跟課程套組不同，不會一次收一筆費用、也不扣套組額度。選到的日期只要有一天撞課，整批都不會建立。
+        </p>
         <div class="form-row">
           <label for="f-time-hour">時間（24 小時制）</label>
           <div style="display: flex; gap: 6px; align-items: center">
@@ -87,7 +145,7 @@
         <p style="font-size: 13px; color: #555; margin: 0 0 12px">
           跟學生收的總金額：<span id="total-amount-display">0</span>
         </p>
-        <div class="form-row">
+        <div class="form-row" id="row-payment">
           <label for="f-payment">收款狀態</label>
           <select id="f-payment">
             <option value="unpaid">未收款</option>

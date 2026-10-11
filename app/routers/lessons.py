@@ -10,6 +10,8 @@ from app.database import get_db
 from app.models import LessonStatus, PaymentStatus
 from app.package_logic import (
     available_sessions,
+    describe_lesson_time,
+    find_overlapping_lesson,
     mark_leave_and_reschedule,
     recompute_package_pricing,
     recompute_remaining_sessions,
@@ -123,6 +125,81 @@ def create_lesson(lesson: schemas.LessonCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_lesson)
     return _to_out(db_lesson)
+
+
+
+# 一次最多幾堂：純粹是防手滑（例如快速帶入填錯堂數），不是業務上限
+MAX_BATCH_DATES = 52
+
+
+@router.post("/batch", response_model=schemas.LessonBatchResult, status_code=201)
+def create_lessons_batch(payload: schemas.LessonBatchCreate, db: Session = Depends(get_db)):
+    """一次建立多堂單堂收費的課程（同一位學生、場館、時段，日期多選）。
+
+    跟 POST /api/packages 的批次排課不同：那邊是課程套組（一次收一筆費用、
+    每堂扣一次額度），這裡每一堂都是獨立的單堂課，一律未收款、不掛套組，
+    之後逐堂收費。
+
+    任何一天跟既有課程時段重疊就整批都不建立（全有全無）。刻意不做「跳過
+    撞到的、其他照建」——那會留下一半的資料，教練得自己回頭比對哪幾天沒進去。
+    """
+    student = db.get(models.Student, payload.student_id)
+    if student is None:
+        raise HTTPException(status_code=404, detail="學生不存在")
+    venue = db.get(models.Venue, payload.venue_id)
+    if venue is None:
+        raise HTTPException(status_code=404, detail="場地不存在")
+
+    dates = sorted(set(payload.dates))
+    if not dates:
+        raise HTTPException(status_code=400, detail="請至少選一個日期")
+    if len(dates) > MAX_BATCH_DATES:
+        raise HTTPException(status_code=400, detail=f"一次最多 {MAX_BATCH_DATES} 堂")
+
+    # 先把每一天都檢查完再決定要不要建，不要邊檢查邊建立
+    conflicts = []
+    for day in dates:
+        existing = find_overlapping_lesson(db, day, payload.start_time, payload.duration)
+        if existing is not None:
+            conflicts.append(
+                f"{day.isoformat()} 跟 {existing.student.name} "
+                f"{describe_lesson_time(existing)} 的課重疊"
+            )
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail="以下日期撞課，請取消這幾天再送出：" + "；".join(conflicts),
+        )
+
+    revenue_amount = payload.revenue_amount
+    if revenue_amount is None:
+        revenue_amount = resolve_price(db, student.tier, payload.headcount, payload.duration)
+
+    created = []
+    for day in dates:
+        db_lesson = models.Lesson(
+            student_id=payload.student_id,
+            venue_id=payload.venue_id,
+            package_id=None,
+            date=day,
+            start_time=payload.start_time,
+            duration=payload.duration,
+            headcount=payload.headcount,
+            sequence_no=None,
+            deduct_session=False,
+            payment_status=PaymentStatus.UNPAID,
+            payment_date=None,
+            revenue_amount=revenue_amount,
+            venue_fee_amount=payload.venue_fee_amount,
+        )
+        db.add(db_lesson)
+        created.append(db_lesson)
+    db.commit()
+    for lesson in created:
+        db.refresh(lesson)
+    return schemas.LessonBatchResult(
+        created=len(created), lessons=[_to_out(lesson) for lesson in created]
+    )
 
 
 @router.get("/{lesson_id}", response_model=schemas.LessonOut)

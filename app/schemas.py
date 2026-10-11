@@ -155,6 +155,31 @@ class LessonOut(BaseModel):
     venue_fee_amount: float
 
 
+class LessonBatchCreate(BaseModel):
+    """單堂收費、一次預訂多堂：同一位學生、同一場館、同一時段，日期可多選。
+
+    跟課程套組的差別：套組是一次收一筆費用、每堂扣一次套組額度；這裡每一堂
+    都是各自獨立的單堂課，一律建成未收款、不掛任何套組、不扣額度，之後逐堂
+    收費。有些學生是單堂計費但會先把接下來幾週的時間一起訂走，就是這個情境。
+    """
+
+    student_id: int
+    venue_id: int
+    dates: list[date]
+    """要建立的日期清單；重複選到同一天只算一次。"""
+    start_time: time
+    duration: int
+    headcount: int = 1
+    revenue_amount: float | None = None
+    """不給就依學生身份別與人數查價目表自動帶入；每一堂的金額相同。"""
+    venue_fee_amount: float = 0
+
+
+class LessonBatchResult(BaseModel):
+    created: int
+    lessons: list[LessonOut]
+
+
 class LessonLeaveRequest(BaseModel):
     makeup_date: date | None = None
     makeup_start_time: time | None = None
